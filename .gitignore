@@ -1,3 +1,22 @@
+# Idea ignore
+.idea/
+*.ipr
+*.iml
+*.iws
+
+# Vscode
+.vscode/
+
+# Temp ignore
+*.log
+*.cache
+*.diff
+*.exe
+*.exe~
+*.patch
+*.tmp
+*debug.test
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
