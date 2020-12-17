@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"gosm/pkg/avformat"
-	"gosm/pkg/avformat/flv"
 	"gosm/pkg/log"
 	"gosm/pkg/utils"
 )
@@ -25,7 +24,7 @@ func NewRoomMgmt(idworker *utils.IDWorker) (*RoomMgmt, error) {
 
 // find room and get
 func (mgmt *RoomMgmt) load(name string) *Room {
-	if room, exist := mgmt.rooms.Load(name); !exist {
+	if room, exist := mgmt.rooms.Load(name); exist {
 		return room.(*Room)
 	}
 	return nil
@@ -77,7 +76,7 @@ func (room *Room) serve() {
 		default:
 			packet, _ := publisher.reader.ReadAVPacket()
 			switch packet.TypeID {
-			case avformat.TypeMetadata: // metadata
+			case avformat.TypeMetadataAMF0: // metadata
 				if err := publisher.parseMetadata(packet); err != nil {
 					log.Error("Publisher: parses metadata error, %v", err)
 					break
@@ -85,26 +84,17 @@ func (room *Room) serve() {
 				metaPacket, _ := publisher.metadata()
 				room.Subscribers.Range(room.broadcast(metaPacket))
 			case avformat.TypeAudio: // audio
+				fallthrough
+			case avformat.TypeVideo: // video
 				if packet.IsAACSeqHeader() {
-					// TODO: parse aac header
 				}
 				if packet.IsAACRaw() {
-					// TODO: handle aac raw
 				}
-				room.Subscribers.Range(room.broadcast(packet))
-			case avformat.TypeVideo: // video
 				if packet.IsAVCSeqHeader() || packet.IsHEVCSeqHeader() {
-					log.Info("AVCSeqHeader || HEVCSeqHeader")
-					seqHeader, err := flv.ParseVideoSeqHeader(packet.Body)
-					if err != nil {
-						break
-					}
-					copy(publisher.sps, seqHeader.Sps)
-					copy(publisher.pps, seqHeader.Pps)
 				}
 				if packet.IsAVCKeyframe() || packet.IsHEVCKeyframe() {
-					// TODO: cache video gop
 				}
+				publisher.cache.Write(packet)
 				room.Subscribers.Range(room.broadcast(packet))
 			}
 		}
@@ -115,10 +105,19 @@ func (room *Room) serve() {
 func (room *Room) broadcast(packet *avformat.AVPacket) func(key, value interface{}) bool {
 	return func(key, value interface{}) bool {
 		subscriber := value.(*Subscriber)
-		stream := subscriber.stream.(AVWriteCloser)
-		if err := stream.WriteAVPacket(packet); err != nil {
-			log.Error("Subscribe: write av packet err, %v, close it", err)
-			stream.Close()
+
+		var err error
+		switch subscriber.status {
+		case _statusNew: // flush cache av packets
+			err = room.Publisher.cache.WriteTo(subscriber.writer)
+			subscriber.status = _statusRunning
+		case _statusRunning: // flush av packet
+			err = subscriber.writer.WriteAVPacket(packet)
+		}
+
+		if err != nil {
+			log.Error("Subscribe: broadcast av packet err,%v", err)
+			subscriber.close()
 			room.Subscribers.Delete(key)
 		}
 		return true
