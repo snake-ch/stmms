@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gosm/pkg/avformat"
+	"gosm/pkg/avformat/flv"
 	"gosm/pkg/log"
 	"gosm/pkg/protocol/amf"
 	"gosm/pkg/protocol/rtmp"
@@ -26,7 +27,7 @@ type Publisher struct {
 	sps    []byte
 	pps    []byte
 	info   *PublisherInfo
-	cache  *GopCache
+	cache  *AVCache
 	reader AVReadCloser
 }
 
@@ -59,13 +60,14 @@ func NewPublisher(stream *rtmp.NetStream) (*Publisher, error) {
 			PublishTime: time.Now(),
 			MetaData:    nil,
 		},
-		cache:  NewGopCache(2),
+		cache:  NewAVCache(1),
 		reader: stream,
 	}
 	return publisher, nil
 }
 
 // TODO: optimize
+// return onMetaData av packet encoded by amf0 format
 func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 	amf := &amf.AMF0{}
 	buf := new(bytes.Buffer)
@@ -90,7 +92,7 @@ func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 
 	// pack amf0 to av packet
 	packet := &avformat.AVPacket{
-		TypeID:    avformat.TypeMetadata,
+		TypeID:    avformat.TypeMetadataAMF0,
 		Length:    uint32(buf.Len()),
 		Timestamp: 0,
 		StreamID:  1,
@@ -99,6 +101,7 @@ func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 	return packet, nil
 }
 
+// parse rtmp onMetadata() data amf packet
 func (p *Publisher) parseMetadata(packet *avformat.AVPacket) error {
 	amf := &amf.AMF0{}
 	rd := bytes.NewReader(packet.Body)
@@ -179,7 +182,29 @@ func (p *Publisher) parseMetadata(packet *avformat.AVPacket) error {
 			metadata.Stereo = stereo.(bool)
 		}
 	}
-
 	p.info.MetaData = metadata
 	return nil
+}
+
+// parse sps/pps from video seqence header
+func (p *Publisher) parseSpsPps(packet *avformat.AVPacket) error {
+	if packet == nil {
+		packet = p.cache.videoConfig
+	}
+	if packet == nil {
+		return fmt.Errorf("Publisher: video seqence header packet not present")
+	}
+
+	seqHeader, err := flv.ParseVideoSeqHeader(packet.Body)
+	if err != nil {
+		return err
+	}
+	copy(p.sps, seqHeader.Sps)
+	copy(p.pps, seqHeader.Pps)
+	return nil
+}
+
+func (p *Publisher) close() error {
+	p.cancel()
+	return p.reader.Close()
 }
