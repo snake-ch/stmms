@@ -95,15 +95,18 @@ func (server *Server) handleConn(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "video/x-flv")
 	// w.Header().Add("Content-Type","octet-stream")
 	w.Header().Add("Transfer-Encoding", "chunked")
+	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(200)
 
 	// create http-flv media net-stream
 	ns, err := NewNetStream(w, urls[0], urls[1])
 	if err != nil {
-		http.Error(w, "create http-flv net-stream error", http.StatusInternalServerError)
+		http.Error(w, "http-flv: create net-stream error", http.StatusInternalServerError)
+		return
 	}
 	if err := server.obs.OnHTTPFlvSubscribe(ns); err != nil {
-		http.Error(w, "http-flv net-stream subscribes error", http.StatusInternalServerError)
+		http.Error(w, "http-flv: net-stream subscribes error", http.StatusInternalServerError)
+		ns.cancel()
 	}
 
 	// wait for writing done
