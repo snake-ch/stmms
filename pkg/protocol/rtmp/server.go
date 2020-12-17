@@ -91,26 +91,21 @@ func (server *Server) handleConn(goConn net.Conn) {
 				case _StatusPublish:
 					if err := server.observer.OnRTMPPublish(stream); err != nil {
 						log.Error("%v", err)
-						rtmpConn.Close()
 					}
 				case _StatusSubscribe:
 					if err := server.observer.OnRTMPSubscribe(stream); err != nil {
 						log.Error("%v", err)
-						rtmpConn.Close()
 					}
 				case _StatusUnPublish:
 					if err := server.observer.OnRTMPUnPublish(stream); err != nil {
 						log.Error("%v", err)
-						rtmpConn.Close()
 					}
 				case _StatusUnSubscribe:
 					if err := server.observer.OnRTMPUnSubsribe(stream); err != nil {
 						log.Error("%v", err)
-						rtmpConn.Close()
 					}
 				default:
 					log.Error("stream status %d error, publish/subscribe not allowed", stream.status)
-					return
 				}
 			}
 		}
