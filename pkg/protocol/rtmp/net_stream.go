@@ -91,9 +91,9 @@ func (ns *NetStream) onPlay(command *Command) error {
 	ns.info = info
 
 	// set chunksize
-	// if err := ns.nc.SetChunkSize(4096); err != nil {
-	// 	return err
-	// }
+	if err := ns.nc.SetChunkSize(ns.nc.chunkSize); err != nil {
+		return err
+	}
 	// stream is recorded
 	if err := ns.nc.SetStreamIsRecorded(ns.id); err != nil {
 		return err
@@ -198,13 +198,16 @@ func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
 		Body:      bytes.NewBuffer(packet.Body),
 	}
 
-	// TODO: check out message buffer is full
-
+	// check out message buffer is full
+	if len(ns.nc.outMessageStream) > cap(ns.nc.outMessageStream)-24 {
+		return fmt.Errorf("NetStream: out buffer is full")
+	}
 	ns.nc.outMessageStream <- message
 	return nil
 }
 
 // Close .
 func (ns *NetStream) Close() error {
+	ns.status = _StatusStreamClose
 	return nil
 }
