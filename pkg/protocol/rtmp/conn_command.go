@@ -40,7 +40,9 @@ func (nc *NetConnection) onCommand(streamID uint32, command *Command) error {
 		// commands followed not defined in rtmp_spec, but using stream which id equals 0
 		case "releaseStream":
 		case "FCPublish":
+			return nc.fcPublish(command)
 		case "FCUnpublish":
+			return nc.fcUnpublish(command)
 		case "deleteStream":
 			return nc.onDeleteStream(command)
 		case "getStreamLength":
@@ -113,6 +115,21 @@ func (nc *NetConnection) onCreateStream(command *Command) error {
 		streamID = streamID + 1
 	}
 	return nc.WriteCommand(SIDNetConnnection, new(Command).createStreamSuccess(command.TransactionID, streamID))
+}
+
+// FCPublish .
+// FME calls FCPublish with the name of the stream whenever a new stream
+// is published. This notification can be used by server-side action script
+// to maintain list of all streams or also to force FME to stop publishing.
+// To stop publishing, call "onFCPublish" with an info object with status
+// code set to "NetStream.Publish.BadName".
+func (nc *NetConnection) fcPublish(command *Command) error {
+	return nil
+}
+
+// fcUnpublish FME notifies server script when a stream is unpublished.
+func (nc *NetConnection) fcUnpublish(command *Command) error {
+	return nil
 }
 
 // OnDeleteStream .
