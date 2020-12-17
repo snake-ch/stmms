@@ -14,7 +14,7 @@ func (nc *NetConnection) processMessage(message *Message) error {
 	if message == nil {
 		return nil
 	}
-	log.Debug("%0s message: %+v\n", "C -> S", message)
+	// log.Debug("%0s message: %+v\n", "C -> S", message)
 
 	// check should make acknowledgement
 	nc.received += message.Length
@@ -94,7 +94,7 @@ func (nc *NetConnection) processUserControlMessages(message *Message) error {
 	case EventBufferEmpty:
 	case EventBufferReady:
 	default:
-		return fmt.Errorf("unknown user control message :0x%x", eventType)
+		return fmt.Errorf("RTMP: unknown user control message :0x%x", eventType)
 	}
 	return nil
 }
@@ -128,20 +128,20 @@ func (nc *NetConnection) processCommandAMF0(message *Message) error {
 
 	name, err := amf.ReadFrom(message.Body)
 	if err != nil {
-		return fmt.Errorf("command amf0: error to parse name, %s", err)
+		return fmt.Errorf("RTMP: command amf0, error to parse name, %s", err)
 	}
 	command.Name = name.(string)
 
 	transactionID, err := amf.ReadFrom(message.Body)
 	if err != nil {
-		return fmt.Errorf("command amf0: error to parse transaction ID, %s", err)
+		return fmt.Errorf("RTMP: command amf0, error to parse transaction ID, %s", err)
 	}
 	command.TransactionID = uint32(transactionID.(float64))
 
 	for message.Body.Len() > 0 {
 		property, err := amf.ReadFrom(message.Body)
 		if err != nil {
-			return fmt.Errorf("command amf0: error to parse property, %s", err)
+			return fmt.Errorf("RTMP: command amf0, error to parse property, %s", err)
 		}
 		command.Objects = append(command.Objects, property)
 	}
@@ -157,7 +157,7 @@ func (nc *NetConnection) processCommandAMF3(message *Message) error {
 func (nc *NetConnection) processMediaMessage(message *Message) error {
 	stream, ok := nc.streams[message.StreamID]
 	if !ok {
-		return fmt.Errorf("stream id %d not found to transmit audio/video/metadata", message.StreamID)
+		return fmt.Errorf("RTMP: stream id %d not found to transmit audio/video/metadata", message.StreamID)
 	}
 	stream.mediaQueue <- message
 	return nil
@@ -279,7 +279,7 @@ func (nc *NetConnection) SetPeerBandwidth(peerBandwidth uint32, limitType byte) 
 // UserControlMessage .
 func (nc *NetConnection) UserControlMessage(eventType uint16, eventData []byte) error {
 	if eventData == nil {
-		return fmt.Errorf("error to send user control message, event data is empty")
+		return fmt.Errorf("RTMP: error to send user control message, event data is empty")
 	}
 
 	message := &Message{

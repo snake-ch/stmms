@@ -65,35 +65,30 @@ func (room *Room) loadSubscriber(name string) (*Subscriber, bool) {
 func (room *Room) serve() {
 	publisher := room.Publisher
 	defer func() {
-		log.Debug("Room: app '%s', stream '%s' stops", publisher.info.AppName, publisher.info.StreamName)
+		log.Debug("Room: app '%s', stream '%s' stop publishing", publisher.info.AppName, publisher.info.StreamName)
 	}()
-	log.Debug("Room: App '%s' Stream '%s' starts", publisher.info.AppName, publisher.info.StreamName)
+	log.Debug("Room: app '%s' stream '%s' start publishing", publisher.info.AppName, publisher.info.StreamName)
 
 	for {
 		select {
 		case <-publisher.ctx.Done():
 			return
 		default:
-			packet, _ := publisher.reader.ReadAVPacket()
+			packet, err := publisher.reader.ReadAVPacket()
+			if err != nil {
+				return
+			}
 			switch packet.TypeID {
 			case avformat.TypeMetadataAMF0: // metadata
 				if err := publisher.parseMetadata(packet); err != nil {
 					log.Error("Publisher: parses metadata error, %v", err)
-					break
+					return
 				}
 				metaPacket, _ := publisher.metadata()
 				room.Subscribers.Range(room.broadcast(metaPacket))
 			case avformat.TypeAudio: // audio
 				fallthrough
 			case avformat.TypeVideo: // video
-				if packet.IsAACSeqHeader() {
-				}
-				if packet.IsAACRaw() {
-				}
-				if packet.IsAVCSeqHeader() || packet.IsHEVCSeqHeader() {
-				}
-				if packet.IsAVCKeyframe() || packet.IsHEVCKeyframe() {
-				}
 				publisher.cache.Write(packet)
 				room.Subscribers.Range(room.broadcast(packet))
 			}
@@ -108,15 +103,17 @@ func (room *Room) broadcast(packet *avformat.AVPacket) func(key, value interface
 
 		var err error
 		switch subscriber.status {
-		case _statusNew: // flush cache av packets
+		case _new: // flush publisher's cache av packets
 			err = room.Publisher.cache.WriteTo(subscriber.writer)
-			subscriber.status = _statusRunning
-		case _statusRunning: // flush av packet
+			subscriber.status = _running
+		case _running: // flush av packet
 			err = subscriber.writer.WriteAVPacket(packet)
+		case _closed:
+			room.Subscribers.Delete(key)
 		}
 
 		if err != nil {
-			log.Error("Subscribe: broadcast av packet err,%v", err)
+			log.Error("Room: subscriber '%s' writes av packet error, %v, remove it", subscriber.info.ID, err)
 			subscriber.close()
 			room.Subscribers.Delete(key)
 		}

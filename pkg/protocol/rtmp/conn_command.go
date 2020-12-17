@@ -47,7 +47,7 @@ func (nc *NetConnection) onCommand(streamID uint32, command *Command) error {
 			return nc.onDeleteStream(command)
 		case "getStreamLength":
 		default:
-			return fmt.Errorf("unsupport rtmp net-connection command type: %s", command.Name)
+			return fmt.Errorf("RTMP: unsupport net-connection command type: %s", command.Name)
 		}
 	}
 
@@ -103,7 +103,7 @@ func (nc *NetConnection) onConnect(command *Command) error {
 // OnCreateStream .
 func (nc *NetConnection) onCreateStream(command *Command) error {
 	if nc.info == nil {
-		return fmt.Errorf("rtmp net-connection command: %s error, connect server before", command.Name)
+		return fmt.Errorf("RTMP: net-connection command: %s error, connect server before", command.Name)
 	}
 	// find unused stream id, got 1 usually
 	streamID := uint32(1)
@@ -135,9 +135,10 @@ func (nc *NetConnection) fcUnpublish(command *Command) error {
 // OnDeleteStream .
 func (nc *NetConnection) onDeleteStream(command *Command) error {
 	// stream id
-	if id, ok := command.Objects[1].(float64); !ok {
-		log.Error("net-connection command: %s error, stream %d not found", command.Name, uint32(id))
-	} else {
+	if id, ok := command.Objects[1].(float64); ok {
+		if stream, ok := nc.streams[uint32(id)]; ok {
+			stream.Close()
+		}
 		delete(nc.streams, uint32(id))
 	}
 	return nil

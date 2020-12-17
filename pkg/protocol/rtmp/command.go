@@ -27,25 +27,25 @@ func (cmd *Command) WriteTo(w Writer) (n int, err error) {
 	number := 0
 	// command name
 	if number, err = amf.WriteString(w, cmd.Name); err != nil {
-		return n, fmt.Errorf("command: error to write name, %s", err)
+		return n, fmt.Errorf("RTMP: command, error to write name, %s", err)
 	}
 	n = n + number
 	// transaction id
 	if number, err = amf.WriteNumber(w, float64(cmd.TransactionID)); err != nil {
-		return n, fmt.Errorf("command: error to write transaction id, %s", err)
+		return n, fmt.Errorf("RTMP: command, error to write transaction id, %s", err)
 	}
 	n = n + number
 	// objects
 	for _, object := range cmd.Objects {
 		if number, err = amf.WriteTo(w, object); err != nil {
-			return n, fmt.Errorf("command: error to write object, %s", err)
+			return n, fmt.Errorf("RTMP: command, error to write object, %s", err)
 		}
 		n = n + number
 	}
 	// user arguments
 	for _, object := range cmd.UserArguments {
 		if number, err = amf.WriteTo(w, object); err != nil {
-			return n, fmt.Errorf("command: error to write user argument, %s", err)
+			return n, fmt.Errorf("RTMP: command, error to write user argument, %s", err)
 		}
 		n = n + number
 	}

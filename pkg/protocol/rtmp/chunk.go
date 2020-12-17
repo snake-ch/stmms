@@ -126,7 +126,7 @@ func (header *ChunkHeader) ReadFrom(br *bufio.Reader) error {
 		header.timestamp = binary.BigEndian.Uint32(append([]byte{0x00}, buf[:3]...))
 	case 3: // chunk type-3, length equals 0 bytes
 	default:
-		return fmt.Errorf("chunk base header invalid format = %d", header.format)
+		return fmt.Errorf("RTMP: chunk base header invalid format = %d", header.format)
 	}
 
 	// extended timestamp
@@ -169,7 +169,7 @@ func (header *ChunkHeader) WriteTo(bw *bufio.Writer) error {
 			return err
 		}
 	default:
-		return fmt.Errorf("Unsupport chunk stream ID large then 65599")
+		return fmt.Errorf("RTMP: unsupport chunk stream ID large then 65599")
 	}
 
 	// chunk message header

@@ -221,7 +221,7 @@ func (tag *Tag) IsHEVC() bool {
 // ParseTagHeader .
 func (tag *Tag) ParseTagHeader(b []byte) error {
 	if len(b) < 11 {
-		return fmt.Errorf("invalid to parse audio tag data, length = %d", len(b))
+		return fmt.Errorf("FLV: invalid to parse audio tag data, length = %d", len(b))
 	}
 	tag.TagHeader = &TagHeader{}
 	tag.TagHeader.TagType = b[0]
@@ -234,7 +234,7 @@ func (tag *Tag) ParseTagHeader(b []byte) error {
 // ParseAudioTagData .
 func parseAudioTagData(b []byte) (tagData *AudioTagData, err error) {
 	if len(b) < 1 {
-		err = fmt.Errorf("invalid length to parse audio tag data")
+		err = fmt.Errorf("FLV: invalid length to parse audio tag data")
 	}
 	// audio parameters
 	param := b[0]
@@ -252,7 +252,7 @@ func parseAudioTagData(b []byte) (tagData *AudioTagData, err error) {
 // ParseVideoTagData .
 func parseVideoTagData(b []byte) (tagData *VideoTagData, err error) {
 	if len(b) < 1 {
-		err = fmt.Errorf("invalid length to parse video tag data")
+		err = fmt.Errorf("FLV: invalid length to parse video tag data")
 	}
 	// video parameters
 	param := b[0]
@@ -268,7 +268,7 @@ func parseVideoTagData(b []byte) (tagData *VideoTagData, err error) {
 // ParseVideoSeqHeader parse AVC video packet sequence header from flv video tag data
 func ParseVideoSeqHeader(tagData []byte) (*VideoSeqHeader, error) {
 	if len(tagData) < 11 {
-		return nil, fmt.Errorf("invalid length to parse video tag data")
+		return nil, fmt.Errorf("FLV: invalid length to parse video tag data")
 	}
 
 	seqHeader := &VideoSeqHeader{}

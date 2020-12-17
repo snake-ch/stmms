@@ -21,7 +21,7 @@ func (fr *Reader) ReadFlvHeader() ([]byte, error) {
 	}
 	// valid flv header
 	if bytes.Compare(FlvHeader, flvHeader) != 0 {
-		return nil, fmt.Errorf("flv header invalid, %v", flvHeader)
+		return nil, fmt.Errorf("FLV: header invalid, %v", flvHeader)
 	}
 	fr.flvHeader = flvHeader
 	return flvHeader, nil
@@ -34,7 +34,7 @@ func (fr *Reader) ReadPreTagSize0() error {
 		return err
 	}
 	if 0 != size {
-		return fmt.Errorf("flv first pre-tag size err, should be 0")
+		return fmt.Errorf("FLV: first pre-tag size error, should be 0")
 	}
 	return nil
 }

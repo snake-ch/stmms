@@ -2,9 +2,10 @@ package utils
 
 import (
 	"errors"
-	"log"
 	"sync"
 	"time"
+
+	"gosm/pkg/log"
 )
 
 // 1                                               42           52             64
@@ -78,7 +79,7 @@ func (w *IDWorker) NextID() int64 {
 	// 获取当前时间戳如果小于上次时间戳,则表示时间戳获取出现异常
 	timestamp := w.getCurrentTime()
 	if timestamp < w.lastTimestamp {
-		log.Fatal("clock is moving backwards. Rejecting requests until ", w.lastTimestamp)
+		log.Fatal("clock is moving backwards, rejecting requests until %d", w.lastTimestamp)
 	}
 
 	// 获取当前时间戳如果等于上次时间戳(同一毫秒内),则在序列号加一;否则序列号赋值为0,从0开始。

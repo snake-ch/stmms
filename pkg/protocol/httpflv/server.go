@@ -41,7 +41,7 @@ func NewServer(network string, address string, obs ServerObserver) (*Server, fun
 	closeFunc := func() {
 		defer cancel()
 		if err := server.listener.Close(); err != nil {
-			log.Error("HTTP-Flv server shutdown err, %v", err)
+			log.Error("HTTP-Flv: server shutdown error, %v", err)
 		}
 	}
 	return server, closeFunc, nil
@@ -53,7 +53,7 @@ func (server *Server) Start() error {
 	var err error
 	server.listener, err = net.Listen(server.network, server.address)
 	if err != nil {
-		log.Fatal("HTTP-Flv server listen err, %v", err)
+		log.Fatal("HTTP-Flv server listen error, %v", err)
 	}
 	log.Info("HTTP-Flv Server Listen On %s", server.listener.Addr().String())
 

@@ -37,7 +37,7 @@ type Logger struct {
 // SetLevel .
 func SetLevel(level uint8) error {
 	if level < LevelFatal || level > LevelDebug {
-		return fmt.Errorf("log level invalid")
+		return fmt.Errorf("Logger: log level invalid")
 	}
 	logger.level = level
 	return nil

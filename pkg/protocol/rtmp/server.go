@@ -38,7 +38,7 @@ func NewServer(network string, address string, observer ServerObserver) (*Server
 	closeFunc := func() {
 		defer cancel()
 		if err := server.listener.Close(); err != nil {
-			log.Error("rtmp server shutdown err, %v", err)
+			log.Error("RTMP: server shutdown error, %v", err)
 		}
 	}
 	return server, closeFunc, nil
@@ -49,15 +49,15 @@ func (server *Server) Start() {
 	var err error
 	server.listener, err = net.Listen(server.network, server.address)
 	if err != nil {
-		log.Fatal("rtmp server listen err, %v", err)
+		log.Fatal("RTMP: server listen error, %v", err)
 	}
-	log.Info("RTMP Server Listen On %s", server.listener.Addr().String())
+	log.Info("RTMP: Server Listen On %s", server.listener.Addr().String())
 
 	go func() {
 		for {
 			goConn, err := server.listener.Accept()
 			if err != nil {
-				log.Error("rtmp server accept err, %v", err)
+				log.Error("RTMP: server accept error, %v", err)
 			} else {
 				server.handleConn(goConn)
 			}
@@ -67,12 +67,12 @@ func (server *Server) Start() {
 
 // handleConn .
 func (server *Server) handleConn(goConn net.Conn) {
-	log.Debug("client remote: %s, server local: %s", goConn.RemoteAddr().String(), goConn.LocalAddr().String())
+	log.Debug("RTMP: client remote: %s, server local: %s", goConn.RemoteAddr().String(), goConn.LocalAddr().String())
 
 	// handshake
 	rtmpConn := NewNetConn(goConn)
 	if err := rtmpConn.ServerHandshake(); err != nil {
-		log.Error("server handshake err, %v", err)
+		log.Error("RTMP: server handshake error, %v", err)
 		rtmpConn.Close()
 		return
 	}
@@ -88,24 +88,22 @@ func (server *Server) handleConn(goConn net.Conn) {
 				return
 			case stream := <-rtmpConn.streamDone:
 				switch stream.status {
-				case _StatusPublish:
+				case _publish:
 					if err := server.observer.OnRTMPPublish(stream); err != nil {
 						log.Error("%v", err)
 					}
-				case _StatusSubscribe:
+				case _subscribe:
 					if err := server.observer.OnRTMPSubscribe(stream); err != nil {
 						log.Error("%v", err)
 					}
-				case _StatusUnPublish:
+				case _unpublish:
 					if err := server.observer.OnRTMPUnPublish(stream); err != nil {
 						log.Error("%v", err)
 					}
-				case _StatusUnSubscribe:
+				case _unsubscribe:
 					if err := server.observer.OnRTMPUnSubsribe(stream); err != nil {
 						log.Error("%v", err)
 					}
-				default:
-					log.Error("stream status %d error, publish/subscribe not allowed", stream.status)
 				}
 			}
 		}

@@ -67,9 +67,8 @@ func (nc *NetConnection) Close() {
 // Sending loop to send rtmp message
 func (nc *NetConnection) sending() {
 	defer func() {
-		log.Debug("client remote: %v, sending goroutine exit", nc.goConn.RemoteAddr())
+		log.Debug("RTMP: client remote: %v, sending exit", nc.goConn.RemoteAddr())
 	}()
-
 	for {
 		select {
 		case <-nc.ctx.Done():
@@ -87,17 +86,17 @@ func (nc *NetConnection) sending() {
 func (nc *NetConnection) receiving() {
 	defer func() {
 		nc.Close()
-		log.Debug("client remote: %v, receiving goroutine exit", nc.goConn.RemoteAddr())
+		log.Debug("RTMP: client remote: %v, receiving exit", nc.goConn.RemoteAddr())
 	}()
 
 	for {
 		message, err := nc.read()
 		if err != nil {
-			log.Error("rtmp connection receive error, %v, invoke close()", err)
+			log.Error("RTMP: connection receive error, %v invoke close()", err)
 			return
 		}
 		if err := nc.processMessage(message); err != nil {
-			log.Error("%v", err)
+			log.Error("RTMP: process message error, %v", err)
 			return
 		}
 	}
@@ -110,7 +109,7 @@ func (nc *NetConnection) read() (*Message, error) {
 	if err := header.ReadFrom(nc.rw.Reader); err != nil {
 		return nil, err
 	}
-	log.Debug("%0s chunk header: %+v\n", "C -> S", *header)
+	// log.Debug("%0s chunk header: %+v\n", "C -> S", *header)
 
 	// chunk stream
 	cs, exist := nc.chunkStreams[header.chunkStreamID]
@@ -177,7 +176,8 @@ func (nc *NetConnection) read() (*Message, error) {
 
 // write message to client
 func (nc *NetConnection) write(message *Message) error {
-	log.Debug("%0s message: %+v\n", "S -> C", message)
+	// log.Debug("%0s message: %+v\n", "S -> C", message)
+
 	if err := message.WriteTo(nc.rw.Writer, nc.chunkSize); err != nil {
 		return err
 	}

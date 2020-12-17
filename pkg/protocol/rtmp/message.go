@@ -66,7 +66,7 @@ func (message *Message) WriteTo(bw *bufio.Writer, chunkSize uint32) error {
 	case DataAmf0, DataAmf3:
 		header.chunkStreamID = CSIDMetadata
 	default:
-		return fmt.Errorf("error to write message, no match chunk stream ID")
+		return fmt.Errorf("RTMP: error to write message, no match chunk stream ID")
 	}
 
 	// timestamp
