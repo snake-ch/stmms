@@ -11,10 +11,7 @@ import (
 
 // OnRTMPPublish .
 func (mgmt *RoomMgmt) OnRTMPPublish(stream *rtmp.NetStream) error {
-	info, ok := stream.Info().(*rtmp.PublishInfo)
-	if !ok {
-		log.Error("Publisher: information TYPE error")
-	}
+	info, _ := stream.Info().(*rtmp.PublishInfo)
 
 	// release the old one if exist
 	room, exist := mgmt.loadOrStore(info.Name)
@@ -35,14 +32,10 @@ func (mgmt *RoomMgmt) OnRTMPPublish(stream *rtmp.NetStream) error {
 
 // OnRTMPUnPublish .
 func (mgmt *RoomMgmt) OnRTMPUnPublish(stream *rtmp.NetStream) error {
-	info, ok := stream.Info().(*rtmp.PublishInfo)
-	if !ok {
-		log.Error("Publisher: information TYPE error")
-	}
-
+	info, _ := stream.Info().(*rtmp.PublishInfo)
 	room := mgmt.load(info.Name)
 	if room != nil && room.Publisher != nil {
-		log.Debug("Publisher: live room '%s' unpublish detected, release stream", info.Name)
+		log.Debug("Publisher: live room '%s' unpublish detected", info.Name)
 		room.Publisher.close()
 		room.Publisher = nil
 	}
@@ -51,15 +44,11 @@ func (mgmt *RoomMgmt) OnRTMPUnPublish(stream *rtmp.NetStream) error {
 
 // OnRTMPSubscribe .
 func (mgmt *RoomMgmt) OnRTMPSubscribe(stream *rtmp.NetStream) error {
-	info, ok := stream.Info().(*rtmp.SubscribeInfo)
-	if !ok {
-		log.Error("Subscriber: information TYPE error")
-	}
-
+	info, _ := stream.Info().(*rtmp.SubscribeInfo)
 	// check room if exist
 	room, exist := mgmt.loadOrStore(info.StreamName)
 	if !exist {
-		log.Debug("Subscriber: live room '%s' not exist, waiting for av packet", info.StreamName)
+		log.Debug("Subscriber: live room '%s' not published yet, waiting for av packets", info.StreamName)
 	}
 
 	// TODO: should check subscriber if exist ???
@@ -67,7 +56,7 @@ func (mgmt *RoomMgmt) OnRTMPSubscribe(stream *rtmp.NetStream) error {
 	// create subscriber
 	uuid := mgmt.idworker.NextID()
 	subscriber := &Subscriber{
-		status: _statusNew,
+		status: _new,
 		writer: stream,
 		info: &SubscriberInfo{
 			ID:            strconv.FormatInt(uuid, 10),
@@ -101,7 +90,7 @@ func (mgmt *RoomMgmt) OnHTTPFlvSubscribe(stream *httpflv.NetStream) error {
 	// check room if exist
 	room, exist := mgmt.loadOrStore(stream.Info().Stream)
 	if !exist {
-		log.Debug("Subscriber: live room '%s' not exist, waiting for av packet", stream.Info().Stream)
+		log.Debug("Subscriber: live room '%s' not published yet, waiting for av packets", stream.Info().Stream)
 	}
 
 	// TODO: should check subscriber if exist ???
@@ -109,7 +98,7 @@ func (mgmt *RoomMgmt) OnHTTPFlvSubscribe(stream *httpflv.NetStream) error {
 	// create subscriber
 	uuid := mgmt.idworker.NextID()
 	subscriber := &Subscriber{
-		status: _statusNew,
+		status: _new,
 		writer: stream,
 		info: &SubscriberInfo{
 			ID:            strconv.FormatInt(uuid, 10),

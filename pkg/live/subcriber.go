@@ -8,9 +8,9 @@ import (
 
 // Status
 const (
-	_statusNew = iota
-	_statusRunning
-	_statusClose
+	_new = iota
+	_running
+	_closed
 )
 
 // Protocol
@@ -49,6 +49,6 @@ type Subscriber struct {
 }
 
 func (s *Subscriber) close() error {
-	s.status = _statusClose
+	s.status = _closed
 	return s.writer.Close()
 }
