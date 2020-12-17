@@ -206,7 +206,9 @@ func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
 
 // Close .
 func (ns *NetStream) Close() error {
-	close(ns.mediaQueue)
-	ns.status = _closed
+	if ns.status != _closed {
+		close(ns.mediaQueue)
+		ns.status = _closed
+	}
 	return nil
 }
