@@ -54,11 +54,11 @@ func (fr *Reader) ReadFlvFragment() (*Tag, uint32, error) {
 	}
 
 	// tag data
-	buf = make([]byte, flvTag.tagHeader.dataSize)
+	buf = make([]byte, flvTag.TagHeader.DataSize)
 	if _, err := io.ReadFull(fr.r, buf); err != nil {
 		return nil, 0, err
 	}
-	flvTag.tagData = buf
+	flvTag.TagData = buf
 
 	// previous tag size
 	var size uint32

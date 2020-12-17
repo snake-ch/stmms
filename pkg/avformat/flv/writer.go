@@ -20,7 +20,7 @@ func NewWriter(w io.Writer, app string, stream string) (*Writer, error) {
 		stream: stream,
 		w:      w,
 	}
-	// flv header 0x46, 0x4c, 0x56, 0x01, 0x05, 0x00, 0x00, 0x00, 0x09
+	// flv header: 0x46, 0x4c, 0x56, 0x01, 0x05, 0x00, 0x00, 0x00, 0x09
 	if _, err := w.Write(FlvHeader); err != nil {
 		return nil, err
 	}
@@ -36,15 +36,15 @@ func (fw *Writer) WriteTag(tag *Tag) error {
 	buf := new(bytes.Buffer)
 
 	// tag type, 1byte
-	buf.WriteByte(tag.tagHeader.tagType)
+	buf.WriteByte(tag.TagHeader.TagType)
 
 	// data size, 3bytes
-	size := tag.tagHeader.dataSize
+	size := tag.TagHeader.DataSize
 	buf.Write([]byte{byte(size >> 16), byte(size >> 8), byte(size)})
 
 	// timestamp + timestamp extended, 4bytes
-	timestamp := tag.tagHeader.timestamp & 0xFFFFFF
-	timestampExt := tag.tagHeader.timestamp >> 24 & 0xFF
+	timestamp := tag.TagHeader.Timestamp & 0xFFFFFF
+	timestampExt := tag.TagHeader.Timestamp >> 24 & 0xFF
 	buf.Write([]byte{byte(timestamp >> 16), byte(timestamp >> 8), byte(timestamp)})
 	buf.WriteByte(byte(timestampExt))
 
@@ -55,20 +55,20 @@ func (fw *Writer) WriteTag(tag *Tag) error {
 	if _, err := fw.w.Write(buf.Bytes()); err != nil {
 		return err
 	}
-	if _, err := fw.w.Write(tag.tagData); err != nil {
+	if _, err := fw.w.Write(tag.TagData); err != nil {
 		return err
 	}
 
-	// previous tag size
+	// previous tag-size
 	pSize := make([]byte, 4)
-	binary.BigEndian.PutUint32(pSize, tag.tagHeader.dataSize+11)
+	binary.BigEndian.PutUint32(pSize, tag.TagHeader.DataSize+11)
 	if _, err := fw.w.Write(pSize); err != nil {
 		return err
 	}
 	return nil
 }
 
-// WriteRawTag write flv-tag raw data direct. ex. data read from flv file
+// WriteRawTag write flv-tag raw data direct. ex. data read from flv file source
 func (fw *Writer) WriteRawTag(rawTag []byte) error {
 	// flv raw tag
 	if _, err := fw.w.Write(rawTag); err != nil {
