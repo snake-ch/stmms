@@ -4,9 +4,9 @@ import "gosm/pkg/avformat/flv"
 
 // AV packet type
 const (
-	TypeAudio    = uint8(8)
-	TypeVideo    = uint8(9)
-	TypeMetadata = uint8(18)
+	TypeAudio        = uint8(8)
+	TypeVideo        = uint8(9)
+	TypeMetadataAMF0 = uint8(18)
 )
 
 // MetaData common metadata, imitates rtmp metadata, see video_file_format_spec_v10.pdf, setion onMetaData
