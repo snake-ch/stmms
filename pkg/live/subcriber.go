@@ -6,6 +6,13 @@ import (
 	"gosm/pkg/avformat"
 )
 
+// Status
+const (
+	_statusNew = iota
+	_statusRunning
+	_statusClose
+)
+
 // Protocol
 const (
 	_Rtmp    = "rtmp"
@@ -14,6 +21,7 @@ const (
 	_Dash    = "dash"
 )
 
+// Type
 const (
 	_TypeLive   = "LIVE"
 	_TypeRecord = "RECOED"
@@ -25,16 +33,22 @@ type AVWriteCloser interface {
 	Close() error
 }
 
-// Subscriber .
-type Subscriber struct {
-	stream AVWriteCloser
-	info   *SubscriberInfo
-}
-
 // SubscriberInfo .
 type SubscriberInfo struct {
 	ID            string
 	Protocol      string
 	Type          string
 	SubscribeTime time.Time
+}
+
+// Subscriber .
+type Subscriber struct {
+	status uint8
+	writer AVWriteCloser
+	info   *SubscriberInfo
+}
+
+func (s *Subscriber) close() error {
+	s.status = _statusClose
+	return s.writer.Close()
 }
