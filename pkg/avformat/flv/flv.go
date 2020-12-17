@@ -152,16 +152,16 @@ var FlvHeader = []byte{0x46, 0x4c, 0x56, 0x01, 0x05, 0x00, 0x00, 0x00, 0x09}
 
 // Tag FlvTag.
 type Tag struct {
-	tagHeader *TagHeader
-	tagData   []byte
+	TagHeader *TagHeader
+	TagData   []byte
 }
 
 // TagHeader .
 type TagHeader struct {
-	tagType   uint8
-	dataSize  uint32
-	timestamp uint32
-	streamID  uint32 // always 0
+	TagType   uint8
+	DataSize  uint32
+	Timestamp uint32
+	StreamID  uint32 // always 0
 }
 
 // AudioTagData .
@@ -200,22 +200,22 @@ type VideoSeqHeader struct {
 
 // IsMetadata .
 func (tag *Tag) IsMetadata() bool {
-	return tag.tagHeader.tagType == TagTypeMetadata
+	return tag.TagHeader.TagType == TagTypeMetadata
 }
 
 // IsAAC .
 func (tag *Tag) IsAAC() bool {
-	return tag.tagHeader.tagType == TagTypeAudio && tag.tagData[0]>>4 == SoundFormatAAC
+	return tag.TagHeader.TagType == TagTypeAudio && tag.TagData[0]>>4 == SoundFormatAAC
 }
 
 // IsAVC .
 func (tag *Tag) IsAVC() bool {
-	return tag.tagHeader.tagType == TagTypeVideo && tag.tagData[0]&0x0F == CodevIDAVC
+	return tag.TagHeader.TagType == TagTypeVideo && tag.TagData[0]&0x0F == CodevIDAVC
 }
 
 // IsHEVC .
 func (tag *Tag) IsHEVC() bool {
-	return tag.tagHeader.tagType == TagTypeVideo && tag.tagData[0]&0x0F == CodevIDHEVC
+	return tag.TagHeader.TagType == TagTypeVideo && tag.TagData[0]&0x0F == CodevIDHEVC
 }
 
 // ParseTagHeader .
@@ -223,11 +223,11 @@ func (tag *Tag) ParseTagHeader(b []byte) error {
 	if len(b) < 11 {
 		return fmt.Errorf("invalid to parse audio tag data, length = %d", len(b))
 	}
-	tag.tagHeader = &TagHeader{}
-	tag.tagHeader.tagType = b[0]
-	tag.tagHeader.dataSize = binary.BigEndian.Uint32(b[1:4])
-	tag.tagHeader.timestamp = uint32(b[7])<<24 + binary.BigEndian.Uint32(b[4:7])
-	tag.tagHeader.streamID = 0 // always 0
+	tag.TagHeader = &TagHeader{}
+	tag.TagHeader.TagType = b[0]
+	tag.TagHeader.DataSize = binary.BigEndian.Uint32(b[1:4])
+	tag.TagHeader.Timestamp = uint32(b[7])<<24 + binary.BigEndian.Uint32(b[4:7])
+	tag.TagHeader.StreamID = 0 // always 0
 	return nil
 }
 
