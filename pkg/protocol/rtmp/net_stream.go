@@ -3,18 +3,18 @@ package rtmp
 import (
 	"bytes"
 	"fmt"
+
 	"gosm/pkg/avformat"
-	"gosm/pkg/log"
 )
 
 // stream status
 const (
-	_StatusUnknown uint8 = iota
-	_StatusPublish
-	_StatusUnPublish
-	_StatusSubscribe
-	_StatusUnSubscribe
-	_StatusStreamClose
+	_unknown uint8 = iota
+	_publish
+	_unpublish
+	_subscribe
+	_unsubscribe
+	_closed
 )
 
 // PublishInfo net stream info
@@ -45,7 +45,7 @@ func NewNetStream(id uint32, nc *NetConnection) *NetStream {
 	return &NetStream{
 		id:         id,
 		nc:         nc,
-		status:     _StatusUnknown,
+		status:     _unknown,
 		info:       nil,
 		mediaQueue: make(chan *Message, 1024),
 	}
@@ -67,16 +67,15 @@ func (ns *NetStream) onCommand(command *Command) error {
 	case "seek":
 	case "pause":
 	default:
-		return fmt.Errorf("unsupport rtmp stream command type: %s", command.Name)
+		return fmt.Errorf("RTMP: unsupport net-stream command type: %s", command.Name)
 	}
 	return nil
 }
 
 // OnPlay .
 func (ns *NetStream) onPlay(command *Command) error {
-	if ns.status == _StatusSubscribe || ns.status == _StatusPublish {
-		log.Debug("rtmp net-stream id: %d has published or subscribed, ignore Play()", ns.id)
-		return nil
+	if ns.status == _publish {
+		return fmt.Errorf("RTMP: net-stream id: %d has published, ignore Play()", ns.id)
 	}
 
 	info := &SubscribeInfo{}
@@ -112,14 +111,13 @@ func (ns *NetStream) onPlay(command *Command) error {
 	}
 
 	// export subscriber
-	return ns.streamDone(_StatusSubscribe)
+	return ns.streamDone(_subscribe)
 }
 
 // OnPublish .
 func (ns *NetStream) onPublish(command *Command) error {
-	if ns.status == _StatusSubscribe || ns.status == _StatusPublish {
-		log.Debug("rtmp net-stream id: %d has published or subscribed, ignore Publish()", ns.id)
-		return nil
+	if ns.status == _subscribe {
+		return fmt.Errorf("RTMP: net-stream id: %d has subscribed, ignore Publish()", ns.id)
 	}
 
 	info := &PublishInfo{}
@@ -139,7 +137,7 @@ func (ns *NetStream) onPublish(command *Command) error {
 	}
 
 	// export publisher
-	return ns.streamDone(_StatusPublish)
+	return ns.streamDone(_publish)
 }
 
 // OnDeleteStream .
@@ -149,9 +147,6 @@ func (ns *NetStream) onDeleteStream(command *Command) error {
 
 // make stream done signal: publish, subscribe, unpublish, unsubscribe
 func (ns *NetStream) streamDone(status uint8) error {
-	if status < _StatusUnknown || status > _StatusStreamClose {
-		return fmt.Errorf("net-stream unknown status : %d", status)
-	}
 	ns.status = status
 	ns.nc.streamDone <- ns
 	return nil
@@ -173,7 +168,10 @@ func (ns *NetStream) ConnInfo() *ConnInfo {
 
 // ReadAVPacket read from publisher, block if no av packet in rtmp net-stream
 func (ns *NetStream) ReadAVPacket() (*avformat.AVPacket, error) {
-	message := <-ns.mediaQueue
+	message, ok := <-ns.mediaQueue
+	if !ok {
+		return nil, fmt.Errorf("RTMP: stream '%d' media queue closed", ns.id)
+	}
 	packet := &avformat.AVPacket{
 		TypeID:    message.TypeID,
 		Length:    message.Length,
@@ -200,7 +198,7 @@ func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
 
 	// check out message buffer is full
 	if len(ns.nc.outMessageStream) > cap(ns.nc.outMessageStream)-24 {
-		return fmt.Errorf("NetStream: out buffer is full")
+		return fmt.Errorf("RTMP: net-stream out buffer is full")
 	}
 	ns.nc.outMessageStream <- message
 	return nil
@@ -208,6 +206,7 @@ func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
 
 // Close .
 func (ns *NetStream) Close() error {
-	ns.status = _StatusStreamClose
+	close(ns.mediaQueue)
+	ns.status = _closed
 	return nil
 }
