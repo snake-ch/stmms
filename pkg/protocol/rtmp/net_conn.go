@@ -76,6 +76,7 @@ func (nc *NetConnection) sending() {
 			return
 		case message := <-nc.outMessageStream:
 			if err := nc.write(message); err != nil {
+				log.Error("%v", err)
 				return
 			}
 		}
