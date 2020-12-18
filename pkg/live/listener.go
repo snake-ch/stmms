@@ -7,6 +7,7 @@ import (
 	"gosm/pkg/log"
 	"gosm/pkg/protocol/httpflv"
 	"gosm/pkg/protocol/rtmp"
+	"gosm/pkg/utils"
 )
 
 // OnRTMPPublish .
@@ -17,15 +18,16 @@ func (mgmt *RoomMgmt) OnRTMPPublish(stream *rtmp.NetStream) error {
 	room, exist := mgmt.loadOrStore(info.Name)
 	if exist {
 		log.Debug("Publisher: live room '%s' exists, republish", info.Name)
-		mgmt.OnRTMPUnPublish(stream)
-	}
-	var err error
-	room.Publisher, err = NewPublisher(stream)
-	if err != nil {
-		return err
+		if err := mgmt.OnRTMPUnPublish(stream); err != nil {
+			return err
+		}
 	}
 
-	// start to serve
+	// publisher starts to serve
+	var err error
+	if room.Publisher, err = NewPublisher(stream); err != nil {
+		return err
+	}
 	go room.serve()
 	return nil
 }
@@ -54,12 +56,12 @@ func (mgmt *RoomMgmt) OnRTMPSubscribe(stream *rtmp.NetStream) error {
 	// TODO: should check subscriber if exist ???
 
 	// create subscriber
-	uuid := mgmt.idworker.NextID()
+	uuid := utils.Snowflake.NextID()
 	subscriber := &Subscriber{
 		status: _new,
 		writer: stream,
 		info: &SubscriberInfo{
-			ID:            strconv.FormatInt(uuid, 10),
+			UID:           strconv.FormatInt(uuid, 10),
 			Protocol:      _Rtmp,
 			Type:          _TypeLive,
 			SubscribeTime: time.Now(),
@@ -82,7 +84,7 @@ func (mgmt *RoomMgmt) OnRTMPSubscribe(stream *rtmp.NetStream) error {
 
 // OnRTMPUnSubsribe .
 func (mgmt *RoomMgmt) OnRTMPUnSubsribe(stream *rtmp.NetStream) error {
-	return nil
+	return stream.Close()
 }
 
 // OnHTTPFlvSubscribe .
@@ -96,12 +98,12 @@ func (mgmt *RoomMgmt) OnHTTPFlvSubscribe(stream *httpflv.NetStream) error {
 	// TODO: should check subscriber if exist ???
 
 	// create subscriber
-	uuid := mgmt.idworker.NextID()
+	uuid := utils.Snowflake.NextID()
 	subscriber := &Subscriber{
 		status: _new,
 		writer: stream,
 		info: &SubscriberInfo{
-			ID:            strconv.FormatInt(uuid, 10),
+			UID:           strconv.FormatInt(uuid, 10),
 			Protocol:      _HTTPFlv,
 			Type:          _TypeLive,
 			SubscribeTime: time.Now(),
@@ -124,7 +126,7 @@ func (mgmt *RoomMgmt) OnHTTPFlvSubscribe(stream *httpflv.NetStream) error {
 
 // OnHTTPFlvUnSubscribe .
 func (mgmt *RoomMgmt) OnHTTPFlvUnSubscribe(stream *httpflv.NetStream) error {
-	return nil
+	return stream.Close()
 }
 
 // OnHLSSubscribe .
