@@ -60,6 +60,9 @@ func (nc *NetConnection) Start() {
 
 // Close close rtmp connection
 func (nc *NetConnection) Close() {
+	for _, stream := range nc.streams {
+		stream.Close()
+	}
 	nc.cancel()
 	nc.goConn.Close()
 }
