@@ -53,9 +53,9 @@ func (server *Server) Start() error {
 	var err error
 	server.listener, err = net.Listen(server.network, server.address)
 	if err != nil {
-		log.Fatal("HTTP-Flv server listen error, %v", err)
+		log.Fatal("HTTP-Flv: server listen error, %v", err)
 	}
-	log.Info("HTTP-Flv Server Listen On %s", server.listener.Addr().String())
+	log.Info("HTTP-Flv: Server Listen On %s", server.listener.Addr().String())
 
 	// muxer
 	muxer := http.NewServeMux()
