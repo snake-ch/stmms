@@ -10,7 +10,6 @@ import (
 	"gosm/pkg/log"
 	"gosm/pkg/protocol/httpflv"
 	"gosm/pkg/protocol/rtmp"
-	"gosm/pkg/utils"
 )
 
 const (
@@ -29,14 +28,11 @@ func main() {
     | |__| | (_) |___) | |  | |
      \_____|\___/_____/|_|  |_|    version: %s`, _Version+"\n\n")
 
-	// log.SetLevel(log.LevelDebug)
+	log.SetLevel(log.LevelDebug)
 	log.SetPrefix(_LogPrefiex)
 
-	// id worker
-	idworker, err := utils.NewSnowflake(1, 1)
-
 	// living room managerment
-	roomMgmt, err := live.NewRoomMgmt(idworker)
+	roomMgmt, err := live.NewRoomMgmt()
 
 	// rtmp server
 	rtmpServer, rtmpCloseFunc, err := rtmp.NewServer("tcp", ":"+_PortRTMP, roomMgmt)

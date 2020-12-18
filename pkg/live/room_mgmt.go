@@ -5,7 +5,6 @@ import (
 
 	"gosm/pkg/avformat"
 	"gosm/pkg/log"
-	"gosm/pkg/utils"
 )
 
 // RoomMgmt living room managerment, defined followed:
@@ -13,13 +12,12 @@ import (
 //		-> map[room's name]*room
 //		-> map[publisher's name]map[subscriber's name]*subscriber
 type RoomMgmt struct {
-	idworker *utils.IDWorker
-	rooms    sync.Map
+	rooms *sync.Map
 }
 
 // NewRoomMgmt .
-func NewRoomMgmt(idworker *utils.IDWorker) (*RoomMgmt, error) {
-	return &RoomMgmt{idworker: idworker}, nil
+func NewRoomMgmt() (*RoomMgmt, error) {
+	return &RoomMgmt{rooms: &sync.Map{}}, nil
 }
 
 // find room and get
@@ -65,9 +63,9 @@ func (room *Room) loadSubscriber(name string) (*Subscriber, bool) {
 func (room *Room) serve() {
 	publisher := room.Publisher
 	defer func() {
-		log.Debug("Room: app '%s', stream '%s' stop publishing", publisher.info.AppName, publisher.info.StreamName)
+		log.Info("Room: app '%s', stream '%s' stop publishing", publisher.info.AppName, publisher.info.StreamName)
 	}()
-	log.Debug("Room: app '%s' stream '%s' start publishing", publisher.info.AppName, publisher.info.StreamName)
+	log.Info("Room: app '%s' stream '%s' start publishing", publisher.info.AppName, publisher.info.StreamName)
 
 	for {
 		select {
@@ -113,7 +111,7 @@ func (room *Room) broadcast(packet *avformat.AVPacket) func(key, value interface
 		}
 
 		if err != nil {
-			log.Error("Room: subscriber '%s' writes av packet error, %v, remove it", subscriber.info.ID, err)
+			log.Error("Room: subscriber '%s' writes av packet error, %v, remove it", subscriber.info.UID, err)
 			subscriber.close()
 			room.Subscribers.Delete(key)
 		}
