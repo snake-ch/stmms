@@ -42,7 +42,7 @@ type PublisherInfo struct {
 
 // NewPublisher .
 func NewPublisher(stream *rtmp.NetStream) (*Publisher, error) {
-	pubInfo, ok := stream.Info().(*rtmp.PublishInfo)
+	info, ok := stream.Info().(*rtmp.PublishInfo)
 	if !ok {
 		log.Error("Publisher: information TYPE error")
 	}
@@ -55,12 +55,12 @@ func NewPublisher(stream *rtmp.NetStream) (*Publisher, error) {
 		pps:    nil,
 		info: &PublisherInfo{
 			AppName:     stream.ConnInfo().App,
-			StreamName:  pubInfo.Name,
-			StreamType:  pubInfo.Type,
+			StreamName:  info.Name,
+			StreamType:  info.Type,
 			PublishTime: time.Now(),
 			MetaData:    nil,
 		},
-		cache:  NewAVCache(1),
+		cache:  NewAVCache(),
 		reader: stream,
 	}
 	return publisher, nil

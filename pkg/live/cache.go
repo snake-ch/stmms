@@ -23,7 +23,7 @@ type AVCache struct {
 }
 
 // NewAVCache TODO: parameterize gop size
-func NewAVCache(size uint8) *AVCache {
+func NewAVCache() *AVCache {
 	return &AVCache{
 		audioConfig: nil,
 		videoConfig: nil,
