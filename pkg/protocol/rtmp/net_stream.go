@@ -17,13 +17,13 @@ const (
 	_closed
 )
 
-// PublishInfo net stream info
+// PublishInfo see rtmp-spec-1.0 netstream command Publish()
 type PublishInfo struct {
 	Name string
 	Type string
 }
 
-// SubscribeInfo .
+// SubscribeInfo see rtmp-spec-1.0 netstream command Play()
 type SubscribeInfo struct {
 	StreamName string
 	Start      int
@@ -75,7 +75,7 @@ func (ns *NetStream) onCommand(command *Command) error {
 // OnPlay .
 func (ns *NetStream) onPlay(command *Command) error {
 	if ns.status == _publish {
-		return fmt.Errorf("RTMP: net-stream id: %d has published, ignore Play()", ns.id)
+		return fmt.Errorf("RTMP: net-stream id: %d act as publisher, ignore Play()", ns.id)
 	}
 
 	info := &SubscribeInfo{}
@@ -117,7 +117,7 @@ func (ns *NetStream) onPlay(command *Command) error {
 // OnPublish .
 func (ns *NetStream) onPublish(command *Command) error {
 	if ns.status == _subscribe {
-		return fmt.Errorf("RTMP: net-stream id: %d has subscribed, ignore Publish()", ns.id)
+		return fmt.Errorf("RTMP: net-stream id: %d act as subscriber, ignore Publish()", ns.id)
 	}
 
 	info := &PublishInfo{}
@@ -168,6 +168,10 @@ func (ns *NetStream) ConnInfo() *ConnInfo {
 
 // ReadAVPacket read from publisher, block if no av packet in rtmp net-stream
 func (ns *NetStream) ReadAVPacket() (*avformat.AVPacket, error) {
+	if ns.status == _closed {
+		return nil, fmt.Errorf("RTMP: stream '%d' status is closed", ns.id)
+	}
+
 	message, ok := <-ns.mediaQueue
 	if !ok {
 		return nil, fmt.Errorf("RTMP: stream '%d' media queue closed", ns.id)
@@ -188,6 +192,10 @@ func (ns *NetStream) ReadAVPacket() (*avformat.AVPacket, error) {
 
 // WriteAVPacket .
 func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
+	if ns.status == _closed {
+		return fmt.Errorf("RTMP: net-stream status is closed")
+	}
+
 	message := &Message{
 		TypeID:    packet.TypeID,
 		Length:    packet.Length,
