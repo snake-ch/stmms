@@ -35,7 +35,7 @@ type AVWriteCloser interface {
 
 // SubscriberInfo .
 type SubscriberInfo struct {
-	ID            string
+	UID           string
 	Protocol      string
 	Type          string
 	SubscribeTime time.Time
