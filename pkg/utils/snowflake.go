@@ -8,6 +8,9 @@ import (
 	"gosm/pkg/log"
 )
 
+// Snowflake golbal id generator
+var Snowflake, _ = NewSnowflake(0, 0)
+
 // 1                                               42           52             64
 // +-----------------------------------------------+------------+---------------+
 // | timestamp(ms)                                 | workerid   | sequence      |
@@ -20,28 +23,28 @@ import (
 // 3. 12位序列，毫秒内的计数，同一机器，同一时间截并发4096个序号
 const (
 	// 工作ID长度
-	workerIDBits int64 = 5
+	_workerIDBits int64 = 5
 	// 数据中心ID长度
-	datacenterIDBits int64 = 5
+	_datacenterIDBits int64 = 5
 	// 序列号长度
-	sequenceBits int64 = 12
+	_sequenceBits int64 = 12
 
 	// 最大工作ID(31)
-	maxWorkerID int64 = -1 ^ (-1 << uint64(workerIDBits))
+	_maxWorkerID int64 = -1 ^ (-1 << uint64(_workerIDBits))
 	/** 最大数据中心ID(31) */
-	maxDatacenterID int64 = -1 ^ (-1 << uint64(datacenterIDBits))
+	_maxDatacenterID int64 = -1 ^ (-1 << uint64(_datacenterIDBits))
 	/** 最大序列号(4095) */
-	maxSequence int64 = -1 ^ (-1 << uint64(sequenceBits))
+	_maxSequence int64 = -1 ^ (-1 << uint64(_sequenceBits))
 
 	// 工作ID需要左移的位数:12位
-	workShift uint8 = 12
+	_workShift uint8 = 12
 	// 数据中心ID需要左移位数:12+5=17位
-	dataShift uint8 = 17
+	_dataShift uint8 = 17
 	// 时间戳需要左移位数:12+5+5=22位
-	timeShift uint8 = 22
+	_timeShift uint8 = 22
 
 	/** 初始时间戳 2020-01-01 */
-	startTimestamp int64 = 1577808000000
+	_startTimestamp int64 = 1577808000000
 )
 
 // IDWorker id worker
@@ -55,10 +58,10 @@ type IDWorker struct {
 
 // NewSnowflake returns a new snowflake worker that can be used to generate snowflake IDs
 func NewSnowflake(workerID int64, datacenterID int64) (*IDWorker, error) {
-	if workerID < 0 || workerID > maxWorkerID {
+	if workerID < 0 || workerID > _maxWorkerID {
 		return nil, errors.New("workerID must be between 0 and 31")
 	}
-	if datacenterID < 0 || datacenterID > maxDatacenterID {
+	if datacenterID < 0 || datacenterID > _maxDatacenterID {
 		return nil, errors.New("datacenterID must be between 0 and 31")
 	}
 
@@ -84,7 +87,7 @@ func (w *IDWorker) NextID() int64 {
 
 	// 获取当前时间戳如果等于上次时间戳(同一毫秒内),则在序列号加一;否则序列号赋值为0,从0开始。
 	if w.lastTimestamp == timestamp {
-		w.sequence = (w.sequence + 1) & maxSequence
+		w.sequence = (w.sequence + 1) & _maxSequence
 		if w.sequence == 0 {
 			timestamp = w.tilNextMillis()
 		}
@@ -95,9 +98,9 @@ func (w *IDWorker) NextID() int64 {
 	w.lastTimestamp = timestamp
 
 	// 时间戳部分 + 机器标识部分 + 序列号部分
-	return ((timestamp - startTimestamp) << timeShift) |
-		(w.datacenterID << dataShift) |
-		(w.workerID << workShift) |
+	return ((timestamp - _startTimestamp) << _timeShift) |
+		(w.datacenterID << _dataShift) |
+		(w.workerID << _workShift) |
 		w.sequence
 }
 
