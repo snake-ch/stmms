@@ -2,53 +2,48 @@ package amf
 
 import "io"
 
+// AMF-0 Types
 const (
-	amf0 = uint(0)
-	amf3 = uint(3)
+	_AMF0Number        = 0x00
+	_AMF0Boolean       = 0x01
+	_AMF0String        = 0x02
+	_AMF0Object        = 0x03
+	_AMF0Movieclip     = 0x04 // reserved, not supported
+	_AMF0Null          = 0x05
+	_AMF0Undefined     = 0x06
+	_AMF0Reference     = 0x07
+	_AMF0EcmaArray     = 0x08
+	_AMF0ObjectEnd     = 0x09
+	_AMF0StrictArray   = 0x0A
+	_AMF0Date          = 0x0B
+	_AMF0LongString    = 0x0C
+	_AMF0Unsupported   = 0x0D
+	_AMF0Recordset     = 0x0E // reserved, not supported
+	_AMF0XmlDocument   = 0x0F
+	_AMF0TypedObject   = 0x10
+	_AMF0AvmplusObject = 0x11
 )
 
-// AMF-0 Data Types
+// AMF-3 Types
 const (
-	amf0Number        = 0x00
-	amf0Boolean       = 0x01
-	amf0String        = 0x02
-	amf0Object        = 0x03
-	amf0Movieclip     = 0x04 // reserved, not supported
-	amf0Null          = 0x05
-	amf0Undefined     = 0x06
-	amf0Reference     = 0x07
-	amf0EcmaArray     = 0x08
-	amf0ObjectEnd     = 0x09
-	amf0StrictArray   = 0x0A
-	amf0Date          = 0x0B
-	amf0LongString    = 0x0C
-	amf0Unsupported   = 0x0D
-	amf0Recordset     = 0x0E // reserved, not supported
-	amf0XmlDocument   = 0x0F
-	amf0TypedObject   = 0x10
-	amf0AvmplusObject = 0x11
-)
-
-// AMF-3 Data Types
-const (
-	amf3Undefined    = 0x00
-	amf3Null         = 0x01
-	amf3False        = 0x02
-	amf3True         = 0x03
-	amf3Integer      = 0x04
-	amf3Double       = 0x05
-	amf3String       = 0x06
-	amf3Xmldoc       = 0x07
-	amf3Date         = 0x08
-	amf3Array        = 0x09
-	amf3Object       = 0x0A
-	amf3Xml          = 0x0B
-	amf3ByteArray    = 0x0C
-	amf3VectorInt    = 0x0D
-	amf3VectorUint   = 0x0E
-	amf3VectorDouble = 0x0F
-	amf3VectorObject = 0x10
-	amf3Dictionary   = 0x11
+	_AMF3Undefined    = 0x00
+	_AMF3Null         = 0x01
+	_AMF3False        = 0x02
+	_AMF3True         = 0x03
+	_AMF3Integer      = 0x04
+	_AMF3Double       = 0x05
+	_AMF3String       = 0x06
+	_AMF3Xmldoc       = 0x07
+	_AMF3Date         = 0x08
+	_AMF3Array        = 0x09
+	_AMF3Object       = 0x0A
+	_AMF3Xml          = 0x0B
+	_AMF3ByteArray    = 0x0C
+	_AMF3VectorInt    = 0x0D
+	_AMF3VectorUint   = 0x0E
+	_AMF3VectorDouble = 0x0F
+	_AMF3VectorObject = 0x10
+	_AMF3Dictionary   = 0x11
 )
 
 // Writer .
