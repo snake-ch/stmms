@@ -18,41 +18,41 @@ func (amf *AMF0) ReadFrom(r Reader) (interface{}, error) {
 	}
 
 	switch marker {
-	case _AMF0Number:
+	case AMF0Number:
 		return amf.ReadNumber(r)
-	case _AMF0Boolean:
+	case AMF0Boolean:
 		return amf.ReadBoolean(r)
-	case _AMF0String:
+	case AMF0String:
 		return amf.ReadString(r)
-	case _AMF0Object:
+	case AMF0Object:
 		return amf.ReadObject(r)
-	case _AMF0Movieclip:
+	case AMF0Movieclip:
 		return nil, fmt.Errorf("amf0: unsupported type movieclip")
-	case _AMF0Null:
+	case AMF0Null:
 		return amf.ReadNull(r)
-	case _AMF0Undefined:
+	case AMF0Undefined:
 		return amf.ReadUndefined(r)
-	case _AMF0Reference:
+	case AMF0Reference:
 		return nil, fmt.Errorf("amf0: unsupported type reference")
-	case _AMF0EcmaArray:
+	case AMF0EcmaArray:
 		return amf.ReadEcmaArray(r)
-	case _AMF0ObjectEnd:
+	case AMF0ObjectEnd:
 		return nil, fmt.Errorf("amf0: unsupported object end")
-	case _AMF0StrictArray:
+	case AMF0StrictArray:
 		return amf.ReadStrictArray(r)
-	case _AMF0Date:
+	case AMF0Date:
 		return amf.ReadDate(r)
-	case _AMF0LongString:
+	case AMF0LongString:
 		return amf.ReadLongString(r)
-	case _AMF0Unsupported:
+	case AMF0Unsupported:
 		return amf.ReadUnsupported(r)
-	case _AMF0Recordset:
+	case AMF0Recordset:
 		return nil, fmt.Errorf("amf0: unsupported type recordset")
-	case _AMF0XmlDocument:
+	case AMF0XmlDocument:
 		return nil, fmt.Errorf("amf0: unsupported type xml document")
-	case _AMF0TypedObject:
+	case AMF0TypedObject:
 		return nil, fmt.Errorf("amf0: unsupported type type object")
-	case _AMF0AvmplusObject:
+	case AMF0AvmplusObject:
 		return nil, fmt.Errorf("amf0: unsupported type avm plus object")
 	}
 	return nil, fmt.Errorf("amf0: unsupported type %d", marker)
@@ -117,7 +117,7 @@ func (amf *AMF0) ReadObject(r Reader) (data map[string]interface{}, err error) {
 			if err != nil {
 				return nil, fmt.Errorf("amf0: error to read object end-marker, %s", err)
 			}
-			if b != _AMF0ObjectEnd {
+			if b != AMF0ObjectEnd {
 				return nil, fmt.Errorf("amf0: expected object end-marker, %s", err)
 			}
 			break
@@ -276,7 +276,7 @@ func (amf *AMF0) WriteTo(w Writer, val interface{}) (n int, err error) {
 //  - number-marker DOUBLE
 func (amf *AMF0) WriteNumber(w Writer, val float64) (n int, err error) {
 	// number-marker
-	if err = w.WriteByte(_AMF0Number); err != nil {
+	if err = w.WriteByte(AMF0Number); err != nil {
 		return n, fmt.Errorf("amf0: error to write number marker, %s", err)
 	}
 	n = n + 1
@@ -292,7 +292,7 @@ func (amf *AMF0) WriteNumber(w Writer, val float64) (n int, err error) {
 //  - boolean-marker U8
 func (amf *AMF0) WriteBoolean(w Writer, val bool) (n int, err error) {
 	// boolean-marker
-	if err = w.WriteByte(_AMF0Boolean); err != nil {
+	if err = w.WriteByte(AMF0Boolean); err != nil {
 		return n, fmt.Errorf("amf0: error to write boolean marker, %s", err)
 	}
 	n = n + 1
@@ -313,7 +313,7 @@ func (amf *AMF0) WriteBoolean(w Writer, val bool) (n int, err error) {
 //  - string-marker UTF-8
 func (amf *AMF0) WriteString(w Writer, val string) (n int, err error) {
 	// string-marker
-	if err = w.WriteByte(_AMF0String); err != nil {
+	if err = w.WriteByte(AMF0String); err != nil {
 		return n, fmt.Errorf("amf0: error to write string marker, %s", err)
 	}
 	n = n + 1
@@ -335,7 +335,7 @@ func (amf *AMF0) WriteString(w Writer, val string) (n int, err error) {
 // 	- object-marker *((UTF-8 value-type) | (UTF-8-empty object-end-marker))
 func (amf *AMF0) WriteObject(w Writer, val map[string]interface{}) (n int, err error) {
 	// object-marker
-	if err = w.WriteByte(_AMF0Object); err != nil {
+	if err = w.WriteByte(AMF0Object); err != nil {
 		return n, fmt.Errorf("amf0: error to write object marker, %s", err)
 	}
 	n = n + 1
@@ -370,7 +370,7 @@ func (amf *AMF0) WriteObject(w Writer, val map[string]interface{}) (n int, err e
 // WriteNull .
 // 	- null-marker
 func (amf *AMF0) WriteNull(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF0Null); err != nil {
+	if err = w.WriteByte(AMF0Null); err != nil {
 		return n, fmt.Errorf("amf0: error to write null marker, %s", err)
 	}
 	return 1, nil
@@ -379,7 +379,7 @@ func (amf *AMF0) WriteNull(w Writer) (n int, err error) {
 // WriteUndefined .
 // 	- undefined-marker
 func (amf *AMF0) WriteUndefined(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF0Undefined); err != nil {
+	if err = w.WriteByte(AMF0Undefined); err != nil {
 		return n, fmt.Errorf("amf0: error to write undefined marker, %s", err)
 	}
 	return 1, nil
@@ -389,7 +389,7 @@ func (amf *AMF0) WriteUndefined(w Writer) (n int, err error) {
 //  - associative-count *((UTF-8 value-type) | (UTF-8-empty object-end-marker))
 func (amf *AMF0) WriteEcmaArray(w Writer, val map[string]interface{}) (n int, err error) {
 	// ecma-array marker
-	if err = w.WriteByte(_AMF0EcmaArray); err != nil {
+	if err = w.WriteByte(AMF0EcmaArray); err != nil {
 		return n, fmt.Errorf("amf0: error to write ecma-array marker, %s", err)
 	}
 	n = n + 1
@@ -430,14 +430,14 @@ func (amf *AMF0) WriteEcmaArray(w Writer, val map[string]interface{}) (n int, er
 // WriteObjectEnd .
 //  - UTF-8-empty object-end-marker
 func (amf *AMF0) WriteObjectEnd(w Writer) (n int, err error) {
-	return w.Write([]byte{0x00, 0x00, _AMF0ObjectEnd})
+	return w.Write([]byte{0x00, 0x00, AMF0ObjectEnd})
 }
 
 // WriteStrictArray .
 //  - array-count *(value-type)
 func (amf *AMF0) WriteStrictArray(w Writer, val []interface{}) (n int, err error) {
 	// strict-array marker
-	if err = w.WriteByte(_AMF0StrictArray); err != nil {
+	if err = w.WriteByte(AMF0StrictArray); err != nil {
 		return n, fmt.Errorf("amf0: error to write strict-array marker, %s", err)
 	}
 	n = n + 1
@@ -464,7 +464,7 @@ func (amf *AMF0) WriteStrictArray(w Writer, val []interface{}) (n int, err error
 //  - long-string-marker UTF-8-long
 func (amf *AMF0) WriteLongString(w Writer, val string) (n int, err error) {
 	// long-string-marker
-	if err = w.WriteByte(_AMF0LongString); err != nil {
+	if err = w.WriteByte(AMF0LongString); err != nil {
 		return n, fmt.Errorf("amf0: error to write longstring marker, %s", err)
 	}
 	n = n + 1
@@ -485,7 +485,7 @@ func (amf *AMF0) WriteLongString(w Writer, val string) (n int, err error) {
 // WriteUnsupported .
 //  - unsupported-marker
 func (amf *AMF0) WriteUnsupported(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF0Unsupported); err != nil {
+	if err = w.WriteByte(AMF0Unsupported); err != nil {
 		return n, fmt.Errorf("amf0: error to write unsupported marker, %s", err)
 	}
 	return 1, nil

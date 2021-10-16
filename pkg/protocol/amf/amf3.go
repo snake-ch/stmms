@@ -19,33 +19,33 @@ func (amf *AMF3) ReadFrom(r Reader) (data interface{}, err error) {
 	}
 
 	switch marker {
-	case _AMF3Undefined:
+	case AMF3Undefined:
 		return amf.ReadUndefined(r)
-	case _AMF3Null:
+	case AMF3Null:
 		return amf.ReadNull(r)
-	case _AMF3False:
+	case AMF3False:
 		return amf.ReadFalse(r)
-	case _AMF3True:
+	case AMF3True:
 		return amf.ReadTrue(r)
-	case _AMF3Integer:
+	case AMF3Integer:
 		return amf.ReadInteger(r)
-	case _AMF3Double:
+	case AMF3Double:
 		return amf.ReadDouble(r)
-	case _AMF3String:
+	case AMF3String:
 		return amf.ReadString(r)
-	case _AMF3Xmldoc:
+	case AMF3Xmldoc:
 		return nil, fmt.Errorf("amf3: not support to read xml doc")
-	case _AMF3Array:
+	case AMF3Array:
 		return amf.ReadArray(r)
-	case _AMF3Object:
+	case AMF3Object:
 		return amf.ReadObject(r)
-	case _AMF3Xml:
+	case AMF3Xml:
 		return nil, fmt.Errorf("amf3: not support to read xml")
-	case _AMF3ByteArray:
+	case AMF3ByteArray:
 		return amf.ReadByteArray(r)
-	case _AMF3VectorInt, _AMF3VectorUint, _AMF3VectorDouble, _AMF3VectorObject:
+	case AMF3VectorInt, AMF3VectorUint, AMF3VectorDouble, AMF3VectorObject:
 		return nil, fmt.Errorf("amf3: not support to read vector value")
-	case _AMF3Dictionary:
+	case AMF3Dictionary:
 		return nil, fmt.Errorf("amf3: not support to read dictionary value")
 	}
 	return nil, fmt.Errorf("amf3: unsupported type %d", marker)
@@ -248,6 +248,7 @@ func (amf *AMF3) ReadObject(r Reader) (data map[string]interface{}, err error) {
 		}
 
 		// dynamic-members
+		data = make(map[string]interface{})
 		if traits&0x0F == 0x0B {
 			for {
 				// property
@@ -361,9 +362,10 @@ func (amf *AMF3) WriteTo(w Writer, val interface{}) (n int, err error) {
 func (amf *AMF3) WriteU29(w Writer, val uint32) (n int, err error) {
 	if val <= 0x0000007F {
 		if err = w.WriteByte(byte(val)); err != nil {
-			return
+			return 0, err
+		} else {
+			return 1, nil
 		}
-		n = n + 1
 	} else if n <= 0x00003FFF {
 		return w.Write([]byte{byte(n>>7 | 0x80), byte(n & 0x7F)})
 	} else if n <= 0x001FFFFF {
@@ -395,7 +397,7 @@ func (amf *AMF3) WriteUTF8(w Writer, val string) (n int, err error) {
 // WriteUndefined .
 //  - undefined-marker
 func (amf *AMF3) WriteUndefined(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF3Undefined); err != nil {
+	if err = w.WriteByte(AMF3Undefined); err != nil {
 		return n, fmt.Errorf("amf3: error to write undefined marker, %s", err)
 	}
 	return n + 1, nil
@@ -404,7 +406,7 @@ func (amf *AMF3) WriteUndefined(w Writer) (n int, err error) {
 // WriteNull .
 //  - null-marker
 func (amf *AMF3) WriteNull(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF3Null); err != nil {
+	if err = w.WriteByte(AMF3Null); err != nil {
 		return n, fmt.Errorf("amf3: error to write null marker, %s", err)
 	}
 	return n + 1, nil
@@ -413,7 +415,7 @@ func (amf *AMF3) WriteNull(w Writer) (n int, err error) {
 // WriteFalse .
 //  - false-marker
 func (amf *AMF3) WriteFalse(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF3False); err != nil {
+	if err = w.WriteByte(AMF3False); err != nil {
 		return n, fmt.Errorf("amf3: error to write false marker, %s", err)
 	}
 	return n + 1, nil
@@ -422,7 +424,7 @@ func (amf *AMF3) WriteFalse(w Writer) (n int, err error) {
 // WriteTrue .
 //  - true-marker
 func (amf *AMF3) WriteTrue(w Writer) (n int, err error) {
-	if err = w.WriteByte(_AMF3True); err != nil {
+	if err = w.WriteByte(AMF3True); err != nil {
 		return n, fmt.Errorf("amf3: error to write true marker, %s", err)
 	}
 	return n + 1, nil
@@ -432,7 +434,7 @@ func (amf *AMF3) WriteTrue(w Writer) (n int, err error) {
 //  - interger-marker U29
 func (amf *AMF3) WriteInteger(w Writer, val uint32) (n int, err error) {
 	// interger-marker
-	if err = w.WriteByte(_AMF3Integer); err != nil {
+	if err = w.WriteByte(AMF3Integer); err != nil {
 		return n, fmt.Errorf("amf3: error to write integer marker, %s", err)
 	}
 	n = n + 1
@@ -449,7 +451,7 @@ func (amf *AMF3) WriteInteger(w Writer, val uint32) (n int, err error) {
 //  - double-marker Double
 func (amf *AMF3) WriteDouble(w Writer, val float64) (n int, err error) {
 	// double-marker
-	if err = w.WriteByte(_AMF3Double); err != nil {
+	if err = w.WriteByte(AMF3Double); err != nil {
 		return n, fmt.Errorf("amf3: error to write double marker, %s", err)
 	}
 	n = n + 1
@@ -465,7 +467,7 @@ func (amf *AMF3) WriteDouble(w Writer, val float64) (n int, err error) {
 //  - string-marker UTF-8-vr
 func (amf *AMF3) WriteString(w Writer, val string) (n int, err error) {
 	// string-marker
-	if err = w.WriteByte(_AMF3String); err != nil {
+	if err = w.WriteByte(AMF3String); err != nil {
 		return n, fmt.Errorf("amf3: error to write string marker, %s", err)
 	}
 	n = n + 1
@@ -483,7 +485,7 @@ func (amf *AMF3) WriteString(w Writer, val string) (n int, err error) {
 //  ✔ date-marker U29D-value date-time
 func (amf *AMF3) WriteDate(w Writer, val time.Time) (n int, err error) {
 	// date-marker
-	if err = w.WriteByte(_AMF3Date); err != nil {
+	if err = w.WriteByte(AMF3Date); err != nil {
 		return n, fmt.Errorf("amf3: error to write date marker, %s", err)
 	}
 	n = n + 1
@@ -508,7 +510,7 @@ func (amf *AMF3) WriteDate(w Writer, val time.Time) (n int, err error) {
 //  - array-marker U29A-value *(assoc-value) UTF-8-empty *(value-type)
 func (amf *AMF3) WriteArray(w Writer, val []interface{}) (n int, err error) {
 	// array-marker
-	if err = w.WriteByte(_AMF3Array); err != nil {
+	if err = w.WriteByte(AMF3Array); err != nil {
 		return n, fmt.Errorf("amf3: error to write array marker, %s", err)
 	}
 	n = n + 1
@@ -544,7 +546,7 @@ func (amf *AMF3) WriteArray(w Writer, val []interface{}) (n int, err error) {
 //  ✔ object-marker U29O-traits class-name *(UTF-8-vr) *(value-type) *(dynamic-member)
 func (amf *AMF3) WriteObject(w Writer, val map[string]interface{}) (n int, err error) {
 	// object marker
-	if err = w.WriteByte(_AMF3Object); err != nil {
+	if err = w.WriteByte(AMF3Object); err != nil {
 		return n, fmt.Errorf("amf3: error to write object marker, %s", err)
 	}
 	n = n + 1
@@ -586,7 +588,7 @@ func (amf *AMF3) WriteObject(w Writer, val map[string]interface{}) (n int, err e
 //  ✔ bytearray-marker U29B-value *(U8)
 func (amf *AMF3) WriteBytearray(w Writer, val []byte) (n int, err error) {
 	// bytearray marker
-	if err = w.WriteByte(_AMF3ByteArray); err != nil {
+	if err = w.WriteByte(AMF3ByteArray); err != nil {
 		return n, fmt.Errorf("amf3: error to write bytearray marker, %s", err)
 	}
 	n = n + 1
