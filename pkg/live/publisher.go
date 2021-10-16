@@ -2,19 +2,15 @@ package live
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"gosm/pkg/avformat"
-	"gosm/pkg/avformat/flv"
-	"gosm/pkg/log"
 	"gosm/pkg/protocol/amf"
-	"gosm/pkg/protocol/rtmp"
 )
 
-// AVReadCloser for publisher
+// AVReadCloser .
 type AVReadCloser interface {
 	ReadAVPacket() (*avformat.AVPacket, error)
 	Close() error
@@ -22,13 +18,9 @@ type AVReadCloser interface {
 
 // Publisher .
 type Publisher struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	sps    []byte
-	pps    []byte
-	info   *PublisherInfo
-	cache  *AVCache
-	reader AVReadCloser
+	info  *PublisherInfo
+	cache *AVCache
+	rc    AVReadCloser
 }
 
 // PublisherInfo .
@@ -40,34 +32,7 @@ type PublisherInfo struct {
 	MetaData    *avformat.MetaData
 }
 
-// NewPublisher .
-func NewPublisher(stream *rtmp.NetStream) (*Publisher, error) {
-	info, ok := stream.Info().(*rtmp.PublishInfo)
-	if !ok {
-		log.Error("Publisher: information TYPE error")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	publisher := &Publisher{
-		ctx:    ctx,
-		cancel: cancel,
-		sps:    nil,
-		pps:    nil,
-		info: &PublisherInfo{
-			AppName:     stream.ConnInfo().App,
-			StreamName:  info.Name,
-			StreamType:  info.Type,
-			PublishTime: time.Now(),
-			MetaData:    nil,
-		},
-		cache:  NewAVCache(),
-		reader: stream,
-	}
-	return publisher, nil
-}
-
-// TODO: optimize
-// return onMetaData av packet encoded by amf0 format
+// return onMetaData av packet encoded by amf0
 func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 	amf := &amf.AMF0{}
 	buf := new(bytes.Buffer)
@@ -80,7 +45,7 @@ func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 	mapMetadata := make(map[string]interface{})
 	json.Unmarshal(metadata, &mapMetadata)
 
-	// convert map to amf0
+	// convert from map to amf0
 	_, err = amf.WriteString(buf, "onMetaData")
 	if err != nil {
 		return nil, err
@@ -90,7 +55,7 @@ func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 		return nil, err
 	}
 
-	// pack amf0 to av packet
+	// pack metadata packet
 	packet := &avformat.AVPacket{
 		TypeID:    avformat.TypeMetadataAMF0,
 		Length:    uint32(buf.Len()),
@@ -104,29 +69,29 @@ func (p *Publisher) metadata() (*avformat.AVPacket, error) {
 // parse rtmp onMetadata() data amf packet
 func (p *Publisher) parseMetadata(packet *avformat.AVPacket) error {
 	amf := &amf.AMF0{}
-	rd := bytes.NewReader(packet.Body)
+	r := bytes.NewReader(packet.Body)
 	metadata := &avformat.MetaData{
 		Server: "github.com/snake-ch/go-streaming-media",
 	}
 
 	// @setDataFrame
-	if val, err := amf.ReadFrom(rd); err != nil {
+	if val, err := amf.ReadFrom(r); err != nil {
 		return err
-	} else if "@setDataFrame" != val.(string) {
+	} else if val.(string) != "@setDataFrame" {
 		return fmt.Errorf("Publisher: data amf0 '@setDataFrame' missing")
 	}
 
 	// onMetaData
-	if val, err := amf.ReadFrom(rd); err != nil {
+	if val, err := amf.ReadFrom(r); err != nil {
 		return err
-	} else if "onMetaData" != val.(string) {
+	} else if val.(string) != "onMetaData" {
 		return fmt.Errorf("Publisher: data amf0 'onMetaData' missing")
 	}
 
 	// audio/video property
 	var objects []interface{}
-	for rd.Len() > 0 {
-		property, err := amf.ReadFrom(rd)
+	for r.Len() > 0 {
+		property, err := amf.ReadFrom(r)
 		if err != nil {
 			return err
 		}
@@ -186,25 +151,6 @@ func (p *Publisher) parseMetadata(packet *avformat.AVPacket) error {
 	return nil
 }
 
-// parse sps/pps from video seqence header
-func (p *Publisher) parseSpsPps(packet *avformat.AVPacket) error {
-	if packet == nil {
-		packet = p.cache.videoConfig
-	}
-	if packet == nil {
-		return fmt.Errorf("Publisher: video seqence header packet not present")
-	}
-
-	seqHeader, err := flv.ParseVideoSeqHeader(packet.Body)
-	if err != nil {
-		return err
-	}
-	copy(p.sps, seqHeader.Sps)
-	copy(p.pps, seqHeader.Pps)
-	return nil
-}
-
-func (p *Publisher) close() error {
-	p.cancel()
-	return p.reader.Close()
+func (p *Publisher) Close() error {
+	return p.rc.Close()
 }
