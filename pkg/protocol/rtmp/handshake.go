@@ -12,17 +12,17 @@ import (
 )
 
 const (
-	_Timeout                           = 5 * time.Second
-	_SizeC0, _SizeS0                   = 1, 1
-	_SizeC1, _SizeC2, _SizeS1, _SizeS2 = 1536, 1536, 1536, 1536
-	_SizeDigest                        = 32
+	Timeout                        = 5 * time.Second
+	SizeC0, SizeS0                 = 1, 1
+	SizeC1, SizeC2, SizeS1, SizeS2 = 1536, 1536, 1536, 1536
+	SizeDigest                     = 32
 )
 
 var (
-	_FmsVersion = []byte{0x04, 0x05, 0x00, 0x00}
-	_FpVersion  = []byte{0x09, 0x00, 0x7C, 0x02} // ffmpeg version
+	FmsVersion = []byte{0x04, 0x05, 0x00, 0x00}
+	FpVersion  = []byte{0x09, 0x00, 0x7C, 0x02} // ffmpeg version
 
-	_GenuineFpKey = []byte{
+	GenuineFpKey = []byte{
 		'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
 		'F', 'l', 'a', 's', 'h', ' ', 'P', 'l', 'a', 'y', 'e', 'r', ' ',
 		'0', '0', '1', // Genuine Adobe Flash Player 001
@@ -30,7 +30,7 @@ var (
 		0x02, 0x9E, 0x7E, 0x57, 0x6E, 0xEC, 0x5D, 0x2D, 0x29, 0x80, 0x6F, 0xAB,
 		0x93, 0xB8, 0xE6, 0x36, 0xCF, 0xEB, 0x31, 0xAE,
 	}
-	_GenuineFmsKey = []byte{
+	GenuineFmsKey = []byte{
 		'G', 'e', 'n', 'u', 'i', 'n', 'e', ' ', 'A', 'd', 'o', 'b', 'e', ' ',
 		'F', 'l', 'a', 's', 'h', ' ', 'M', 'e', 'd', 'i', 'a', ' ',
 		'S', 'e', 'r', 'v', 'e', 'r', ' ',
@@ -49,12 +49,12 @@ var (
 //  | --------- C2 ---------> |
 //
 // C1/S1: time(4bytes) + zero(4bytes) + random-data(1528bytes)
-//
+
 func (nc *NetConnection) SimpleClientHandshake() error {
 	// Send C0
 	nc.rw.WriteByte(0x03)
 	// Send C1
-	c1, _ := generateRandom(_SizeC1)
+	c1, _ := generateRandom(SizeC1)
 	binary.BigEndian.PutUint32(c1, uint32(time.Now().UnixNano()/1e6)) // timestamp
 	copy(c1[5:], []byte{0x00, 0x00, 0x00, 0x00})                      // zero
 	nc.rw.Write(c1)
@@ -65,12 +65,12 @@ func (nc *NetConnection) SimpleClientHandshake() error {
 		return err
 	}
 	// Read S1
-	s1 := make([]byte, _SizeS1)
+	s1 := make([]byte, SizeS1)
 	if _, err := io.ReadFull(nc.rw, s1); err != nil {
 		return err
 	}
 	// Read S2
-	s2 := make([]byte, _SizeS2)
+	s2 := make([]byte, SizeS2)
 	if _, err := io.ReadFull(nc.rw, s2); err != nil {
 		return err
 	}
@@ -92,77 +92,78 @@ func (nc *NetConnection) SimpleClientHandshake() error {
 // C2/S2
 // 		time(4bytes) + time2(4bytes) + random-data(1496bytes) + + digest(32bytes)
 //
+
 func (nc *NetConnection) ComplexClientHandshake() error {
 	// Send C0
 	if err := nc.rw.WriteByte(0x03); err != nil {
-		return fmt.Errorf("%0s c0 error, %s", "S -> C", err)
+		return fmt.Errorf("%0s c0 error, %s", "C -> S", err)
 	}
 
 	// Send C1
-	c1, _ := generateRandom(_SizeC1)
+	c1, _ := generateRandom(SizeC1)
 	binary.BigEndian.PutUint32(c1, uint32(time.Now().UnixNano()/1e6)) // timestamp
-	copy(c1[5:], _FpVersion)                                          // version
+	copy(c1[5:], FpVersion)                                           // version
 	c1DigestPos := calcDigestPosition(c1, 8)                          // schemal-1
-	c1Digest, _ := generateDigest(c1, 8, _GenuineFpKey[:30])          // digest
+	c1Digest, _ := generateDigest(c1, 8, GenuineFpKey[:30])           // digest
 	copy(c1[c1DigestPos:], c1Digest)
-	nc.goConn.SetWriteDeadline(time.Now().Add(_Timeout))
+	nc.goConn.SetWriteDeadline(time.Now().Add(Timeout))
 	if _, err := nc.rw.Write(c1); err != nil {
 		return err
 	}
 	if err := nc.rw.Flush(); err != nil {
-		return fmt.Errorf("%0s c1 error, %s", "S -> C", err)
+		return fmt.Errorf("%0s c1 error, %s", "C -> S", err)
 	}
 
 	// Read S0
-	nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
+	nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
 	s0, err := nc.rw.ReadByte()
 	if err != nil {
 		return nil
 	}
 	if s0 != 0x03 {
-		return fmt.Errorf("%0s s0 error, got s0: %x", "C -> S", s0)
+		return fmt.Errorf("%0s s0 error, got s0: %x", "S -> C", s0)
 	}
 
 	// Read S1
-	s1 := make([]byte, _SizeS1)
-	nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
+	s1 := make([]byte, SizeS1)
+	nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
 	if _, err := io.ReadFull(nc.rw, s1); err != nil {
 		return err
 	}
-	s1DigestPos := findDigest(s1, 8, _GenuineFmsKey[0:36]) // check scheme-0
+	s1DigestPos := findDigest(s1, 8, GenuineFmsKey[0:36]) // check scheme-0
 	if s1DigestPos == -1 {
-		s1DigestPos = findDigest(s1, 8, _GenuineFmsKey[0:36]) // check scheme-1
+		s1DigestPos = findDigest(s1, 8, GenuineFmsKey[0:36]) // check scheme-1
 		if s1DigestPos == -1 {
-			return fmt.Errorf("%0s s1 scheme validating failed", "C -> S")
+			return fmt.Errorf("%0s s1 scheme validating failed", "S -> C")
 		}
 	}
 	s1ArrivedTime := uint32(time.Now().UnixNano() / 1e6) // S1 arrived time, using in C2
 
 	// Read S2
-	nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
-	s2 := make([]byte, _SizeS2)
+	nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
+	s2 := make([]byte, SizeS2)
 	if _, err := io.ReadFull(nc.rw, s2); err != nil {
 		return err
 	}
-	secret, _ := hmacSha256(c1[c1DigestPos:c1DigestPos+_SizeDigest], _GenuineFmsKey)
-	s2Digest, _ := hmacSha256(s2[:_SizeS2-_SizeDigest], secret)
-	if bytes.Compare(s2Digest, s2[_SizeS2-_SizeDigest:]) != 0 {
-		return fmt.Errorf("%0s s2 digest mismatch", "C -> S")
+	secret, _ := hmacSha256(c1[c1DigestPos:c1DigestPos+SizeDigest], GenuineFmsKey)
+	s2Digest, _ := hmacSha256(s2[:SizeS2-SizeDigest], secret)
+	if !bytes.Equal(s2Digest, s2[SizeS2-SizeDigest:]) {
+		return fmt.Errorf("%0s s2 digest mismatch", "S -> C")
 	}
 
 	// Send C2
-	c2, _ := generateRandom(_SizeC2)
-	secret, _ = hmacSha256(s1[s1DigestPos:s1DigestPos+_SizeDigest], _GenuineFpKey)
-	c2Digest, _ := hmacSha256(c2[:_SizeC2-_SizeDigest], secret)
+	c2, _ := generateRandom(SizeC2)
+	secret, _ = hmacSha256(s1[s1DigestPos:s1DigestPos+SizeDigest], GenuineFpKey)
+	c2Digest, _ := hmacSha256(c2[:SizeC2-SizeDigest], secret)
 	copy(c2, s1[0:4])                             // time1
 	binary.BigEndian.PutUint32(c2, s1ArrivedTime) // time2
-	copy(c2[_SizeC2-_SizeDigest:], c2Digest)      // digest
-	nc.goConn.SetWriteDeadline(time.Now().Add(_Timeout))
+	copy(c2[SizeC2-SizeDigest:], c2Digest)        // digest
+	nc.goConn.SetWriteDeadline(time.Now().Add(Timeout))
 	if _, err := nc.rw.Write(c2); err != nil {
 		return err
 	}
 	if err := nc.rw.Flush(); err != nil {
-		return fmt.Errorf("%0s c2 error", "S -> C")
+		return fmt.Errorf("%0s c2 error", "C -> S")
 	}
 
 	nc.goConn.SetDeadline(time.Time{})
@@ -183,9 +184,10 @@ func (nc *NetConnection) ComplexClientHandshake() error {
 // C2/S2
 // 		time(4bytes) + time2(4bytes) + random(1496bytes) + + digest(32bytes)
 //
+
 func (nc *NetConnection) ServerHandshake() error {
 	// Read C0
-	nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
+	nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
 	c0, err := nc.rw.ReadByte()
 	if err != nil {
 		return err
@@ -195,8 +197,8 @@ func (nc *NetConnection) ServerHandshake() error {
 	}
 
 	// Read C1
-	c1 := make([]byte, _SizeC1)
-	nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
+	c1 := make([]byte, SizeC1)
+	nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
 	if _, err := io.ReadFull(nc.rw, c1); err != nil {
 		return err
 	}
@@ -208,12 +210,12 @@ func (nc *NetConnection) ServerHandshake() error {
 	c1Version := binary.BigEndian.Uint32(c1[4:8])
 	if c1Version == 0 {
 		// make S1 adn S2 equals C1
-		s1, s2 := make([]byte, _SizeS1), make([]byte, _SizeS2)
+		s1, s2 := make([]byte, SizeS1), make([]byte, SizeS2)
 		copy(s1, c1)
 		copy(s2, c1)
 
 		// Send S0 + S1 + S2
-		nc.goConn.SetWriteDeadline(time.Now().Add(_Timeout))
+		nc.goConn.SetWriteDeadline(time.Now().Add(Timeout))
 		if err := nc.rw.WriteByte(0x03); err != nil {
 			return err
 		}
@@ -228,8 +230,8 @@ func (nc *NetConnection) ServerHandshake() error {
 		}
 
 		// Read c2
-		nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
-		c2 := make([]byte, _SizeC2)
+		nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
+		c2 := make([]byte, SizeC2)
 		if _, err := io.ReadFull(nc.rw, c2); err != nil {
 			return err
 		}
@@ -241,11 +243,11 @@ func (nc *NetConnection) ServerHandshake() error {
 	/***********************************
 	 ******** complex handshake ********
 	 ***********************************/
-	c1DigestPos := findDigest(c1, 8, _GenuineFpKey[0:30]) // check if scheme-0
+	c1DigestPos := findDigest(c1, 8, GenuineFpKey[0:30]) // check if scheme-0
 	if c1DigestPos == -1 {
-		c1DigestPos = findDigest(c1, 764+8, _GenuineFpKey[0:30]) // check if scheme-1
+		c1DigestPos = findDigest(c1, 764+8, GenuineFpKey[0:30]) // check if scheme-1
 		if c1DigestPos == -1 {
-			return fmt.Errorf("%0s c1 scheme validating failed", "C -> S")
+			return fmt.Errorf("%0s c1 scheme validate failed", "C -> S")
 		}
 	}
 
@@ -255,25 +257,25 @@ func (nc *NetConnection) ServerHandshake() error {
 	}
 
 	// Send S1
-	s1, _ := generateRandom(_SizeS1)
+	s1, _ := generateRandom(SizeS1)
 	binary.BigEndian.PutUint32(s1, uint32(time.Now().UnixNano()/1e6)) // timestamp
-	copy(s1[4:], _FmsVersion)                                         // version
+	copy(s1[4:], FmsVersion)                                          // version
 	s1DigestPos := calcDigestPosition(s1, 8)                          // schemal-1
-	s1Digest, _ := generateDigest(s1, 8, _GenuineFmsKey[:36])         // digest
+	s1Digest, _ := generateDigest(s1, 8, GenuineFmsKey[:36])          // digest
 	copy(s1[s1DigestPos:], s1Digest)
-	nc.goConn.SetWriteDeadline(time.Now().Add(_Timeout))
+	nc.goConn.SetWriteDeadline(time.Now().Add(Timeout))
 	if _, err := nc.rw.Write(s1); err != nil {
 		return fmt.Errorf("%0s s1 error", "S -> C")
 	}
 
 	// Send S2
-	s2, _ := generateRandom(_SizeS2)
-	secret, _ := hmacSha256(c1[c1DigestPos:c1DigestPos+_SizeDigest], _GenuineFmsKey)
-	copy(s2, c1[0:4])                                           // time
-	binary.BigEndian.PutUint32(s2[4:8], c1ArrivedTime)          // time2
-	s2Digest, _ := hmacSha256(s2[:_SizeS2-_SizeDigest], secret) // digest
-	copy(s2[_SizeS2-_SizeDigest:], s2Digest)                    // digest
-	nc.goConn.SetWriteDeadline(time.Now().Add(_Timeout))
+	s2, _ := generateRandom(SizeS2)
+	secret, _ := hmacSha256(c1[c1DigestPos:c1DigestPos+SizeDigest], GenuineFmsKey)
+	copy(s2, c1[0:4])                                         // time
+	binary.BigEndian.PutUint32(s2[4:8], c1ArrivedTime)        // time2
+	s2Digest, _ := hmacSha256(s2[:SizeS2-SizeDigest], secret) // digest
+	copy(s2[SizeS2-SizeDigest:], s2Digest)                    // digest
+	nc.goConn.SetWriteDeadline(time.Now().Add(Timeout))
 	if _, err := nc.rw.Write(s2); err != nil {
 		return err
 	}
@@ -282,16 +284,16 @@ func (nc *NetConnection) ServerHandshake() error {
 	}
 
 	// Read C2
-	c2 := make([]byte, _SizeC2)
-	nc.goConn.SetReadDeadline(time.Now().Add(_Timeout))
+	c2 := make([]byte, SizeC2)
+	nc.goConn.SetReadDeadline(time.Now().Add(Timeout))
 	if _, err := io.ReadFull(nc.rw, c2); err != nil {
 		return fmt.Errorf("%0s c2 error", "C -> S")
 	}
 	// TODO: completed C2 validation
 	if false {
-		secret, _ = hmacSha256(s1[s1DigestPos:s1DigestPos+_SizeDigest], _GenuineFpKey)
-		c2Digest, _ := hmacSha256(c2[:_SizeC2-_SizeDigest], secret)
-		if bytes.Compare(c2Digest, c2[_SizeS2-_SizeDigest:]) != 0 {
+		secret, _ = hmacSha256(s1[s1DigestPos:s1DigestPos+SizeDigest], GenuineFpKey)
+		c2Digest, _ := hmacSha256(c2[:SizeC2-SizeDigest], secret)
+		if !bytes.Equal(c2Digest, c2[SizeS2-SizeDigest:]) {
 			return fmt.Errorf("%0s c2 digest mismatch", "C -> S")
 		}
 	}
@@ -332,7 +334,7 @@ func calcDigestPosition(data []byte, offset int) int {
 func findDigest(data []byte, offset int, secret []byte) int {
 	digestPos := calcDigestPosition(data, offset)
 	hash, _ := generateDigest(data, offset, secret)
-	if bytes.Compare(hash, data[digestPos:digestPos+_SizeDigest]) == 0 {
+	if bytes.Equal(hash, data[digestPos:digestPos+SizeDigest]) {
 		return digestPos
 	}
 	return -1
@@ -343,12 +345,13 @@ func findDigest(data []byte, offset int, secret []byte) int {
 //		random-data-1 -> (offset)bytes
 //		digest-data   -> 32bytes
 //		random-data-2 -> (764-4-offset-32)bytes
+
 func generateDigest(data []byte, offset int, secret []byte) ([]byte, error) {
 	digestPos := calcDigestPosition(data, offset)
 	buf := new(bytes.Buffer)
-	buf.Write(data[:digestPos])             // random-data-1
-	buf.Write(data[digestPos+_SizeDigest:]) // random-data-2
-	return hmacSha256(buf.Bytes(), secret)  // digest-data
+	buf.Write(data[:digestPos])            // random-data-1
+	buf.Write(data[digestPos+SizeDigest:]) // random-data-2
+	return hmacSha256(buf.Bytes(), secret) // digest-data
 }
 
 // KEY(764bytes):
@@ -356,6 +359,7 @@ func generateDigest(data []byte, offset int, secret []byte) ([]byte, error) {
 //		key-data    -> 128bytes
 //		random-data -> (764-offset-128-4)bytes
 //		offset      -> 4bytes
+
 func generatePublicKey(data []byte, offset int, secret []byte) ([]byte, error) {
 	// TODO: generate public key
 	return nil, nil
