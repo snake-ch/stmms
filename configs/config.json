@@ -1,0 +1,31 @@
+{
+  "machine_id": 1,
+  "datacenter_id": 1,
+  "log_level": 5,
+  "rtmp": {
+    "port": "1935",
+    "gop_size": 1,
+    "read_timeout": 30
+  },
+  "http_flv": {
+    "enable": true,
+    "port": "8088"
+  },
+  "hls": {
+    "enable": false,
+    "port": "8089",
+    "ts_path": "cache_av",
+    "ts_prefix": "gosm-live-",
+    "ts_duration": 3000,
+    "ts_window": 9000
+  },
+  "rtp": {
+    "enable": true,
+    "remote": "rtmp://127.0.0.1:1935/live/rtp",
+    "ports": [
+      "5000",
+      "5002"
+    ],
+    "read_timeout": 0
+  }
+}
