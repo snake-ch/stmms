@@ -2,110 +2,95 @@ package rtmp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
-	"time"
 
 	"gosm/pkg/log"
 )
 
-// ServerObserver .
-type ServerObserver interface {
+type Observer interface {
 	OnRTMPPublish(stream *NetStream) error
 	OnRTMPUnPublish(stream *NetStream) error
 	OnRTMPSubscribe(stream *NetStream) error
 	OnRTMPUnSubsribe(stream *NetStream) error
 }
 
-// Server rtmp server
 type Server struct {
 	ctx      context.Context
 	network  string
 	address  string
 	listener net.Listener
-	observer ServerObserver
+	obs      Observer
 }
 
 // NewServer .
-func NewServer(network string, address string, observer ServerObserver) (*Server, func(), error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func NewServer(network string, address string) (*Server, func(), error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	server := &Server{
 		ctx:      ctx,
 		network:  network,
 		address:  address,
 		listener: nil,
-		observer: observer,
+		obs:      nil,
 	}
+
 	closeFunc := func() {
 		defer cancel()
 		if err := server.listener.Close(); err != nil {
-			log.Error("RTMP: server shutdown error, %v", err)
+			log.Error("%v", err)
 		}
 	}
+
 	return server, closeFunc, nil
 }
 
-// Start create rtmp connection handle goroutine
-func (server *Server) Start() {
+// SetObserver .
+func (server *Server) SetObserver(obs Observer) {
+	server.obs = obs
+}
+
+// Serve .
+func (server *Server) Serve() {
+	if server.obs == nil {
+		log.Fatal("RTMP: observer is empty")
+	}
+
 	var err error
 	server.listener, err = net.Listen(server.network, server.address)
 	if err != nil {
 		log.Fatal("RTMP: server listen error, %v", err)
 	}
-	log.Info("RTMP: Server Listen On %s", server.listener.Addr().String())
+	log.Info("RTMP: server listen on %s", server.listener.Addr())
 
 	go func() {
 		for {
 			goConn, err := server.listener.Accept()
 			if err != nil {
+				// close server actived
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+
 				log.Error("RTMP: server accept error, %v", err)
-			} else {
-				server.handleConn(goConn)
+				continue
+			}
+			log.Debug("RTMP: accept remote: %s, local: %s", goConn.RemoteAddr(), goConn.LocalAddr())
+			if err := server.handleConn(goConn); err != nil {
+				log.Error("%v", err)
 			}
 		}
 	}()
 }
 
 // handleConn .
-func (server *Server) handleConn(goConn net.Conn) {
-	log.Debug("RTMP: client remote: %s, server local: %s", goConn.RemoteAddr().String(), goConn.LocalAddr().String())
+func (server *Server) handleConn(goConn net.Conn) error {
+	rtmpConn := NewNetConn(server, goConn)
 
-	// handshake
-	rtmpConn := NewNetConn(goConn)
 	if err := rtmpConn.ServerHandshake(); err != nil {
-		log.Error("RTMP: server handshake error, %v", err)
-		rtmpConn.Close()
-		return
+		goConn.Close()
+		return fmt.Errorf("RTMP: server handshake error, %w", err)
 	}
 
-	// start to serve
-	rtmpConn.Start()
-
-	// waiting for publisher or subscriber command
-	go func() {
-		for {
-			select {
-			case <-rtmpConn.ctx.Done():
-				return
-			case stream := <-rtmpConn.streamDone:
-				switch stream.status {
-				case _publish:
-					if err := server.observer.OnRTMPPublish(stream); err != nil {
-						log.Error("%v", err)
-					}
-				case _subscribe:
-					if err := server.observer.OnRTMPSubscribe(stream); err != nil {
-						log.Error("%v", err)
-					}
-				case _unpublish:
-					if err := server.observer.OnRTMPUnPublish(stream); err != nil {
-						log.Error("%v", err)
-					}
-				case _unsubscribe:
-					if err := server.observer.OnRTMPUnSubsribe(stream); err != nil {
-						log.Error("%v", err)
-					}
-				}
-			}
-		}
-	}()
+	return rtmpConn.Serve()
 }

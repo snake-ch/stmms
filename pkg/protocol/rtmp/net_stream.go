@@ -3,28 +3,21 @@ package rtmp
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"gosm/pkg/avformat"
+	"gosm/pkg/config"
 )
 
-// stream status
-const (
-	_unknown uint8 = iota
-	_publish
-	_unpublish
-	_subscribe
-	_unsubscribe
-	_closed
-)
+var AVReadTimeout = time.Duration(config.Global.RTMP.AVReadTimeout) * time.Second
 
-// PublishInfo see rtmp-spec-1.0 netstream command Publish()
-type PublishInfo struct {
+// StreamInfo
+type StreamInfo struct {
+	// see rtmp-spec-1.0 netstream command Publish()
 	Name string
 	Type string
-}
 
-// SubscribeInfo see rtmp-spec-1.0 netstream command Play()
-type SubscribeInfo struct {
+	// see rtmp-spec-1.0 netstream command Play()
 	StreamName string
 	Start      int
 	Duration   int
@@ -33,21 +26,23 @@ type SubscribeInfo struct {
 
 // NetStream rtmp logical net-stream
 type NetStream struct {
-	id         uint32
-	nc         *NetConnection
-	status     uint8
-	info       interface{}   // information of publisher or subscriber
-	mediaQueue chan *Message // for publishing audio/video/metadata message
+	id      uint32
+	nc      *NetConnection
+	info    *StreamInfo   // information of publisher or subscriber
+	avQueue chan *Message // for publishing audio/video/metadata message
+	timer   *time.Timer   // for read timeout
+	closed  bool
 }
 
 // NewNetStream return a new rtmp net-stream
 func NewNetStream(id uint32, nc *NetConnection) *NetStream {
 	return &NetStream{
-		id:         id,
-		nc:         nc,
-		status:     _unknown,
-		info:       nil,
-		mediaQueue: make(chan *Message, 1024),
+		id:      id,
+		nc:      nc,
+		info:    &StreamInfo{},
+		closed:  false,
+		timer:   nil,
+		avQueue: make(chan *Message, 1024),
 	}
 }
 
@@ -74,20 +69,14 @@ func (ns *NetStream) onCommand(command *Command) error {
 
 // OnPlay .
 func (ns *NetStream) onPlay(command *Command) error {
-	if ns.status == _publish {
-		return fmt.Errorf("RTMP: net-stream id: %d act as publisher, ignore Play()", ns.id)
-	}
-
-	info := &SubscribeInfo{}
 	// stream name
 	if name, ok := command.Objects[1].(string); ok {
-		info.StreamName = name
+		ns.info.StreamName = name
 	}
 	// start
 	if start, ok := command.Objects[2].(int); ok {
-		info.Start = start
+		ns.info.Start = start
 	}
-	ns.info = info
 
 	// set chunksize
 	if err := ns.nc.SetChunkSize(ns.nc.chunkSize); err != nil {
@@ -102,42 +91,45 @@ func (ns *NetStream) onPlay(command *Command) error {
 		return err
 	}
 	// net stream play start
-	if err := ns.nc.WriteCommand(ns.id, new(Command).resetStream()); err != nil {
+	if err := ns.nc.WriteCommand(ns.id, resetStream()); err != nil {
 		return err
 	}
 	// net stream play reset
-	if err := ns.nc.WriteCommand(ns.id, new(Command).startStream()); err != nil {
+	if err := ns.nc.WriteCommand(ns.id, startStream()); err != nil {
 		return err
 	}
 
 	// export subscriber
-	return ns.streamDone(_subscribe)
+	if err := ns.nc.server.obs.OnRTMPSubscribe(ns); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // OnPublish .
 func (ns *NetStream) onPublish(command *Command) error {
-	if ns.status == _subscribe {
-		return fmt.Errorf("RTMP: net-stream id: %d act as subscriber, ignore Publish()", ns.id)
-	}
-
-	info := &PublishInfo{}
 	// stream name
 	if name, ok := command.Objects[1].(string); ok {
-		info.Name = name
+		ns.info.Name = name
 	}
 	// stream type
 	if t, ok := command.Objects[2].(string); ok {
-		info.Type = t
+		ns.info.Type = t
 	}
-	ns.info = info
 
 	// make response
-	if err := ns.nc.WriteCommand(SIDNetStream, new(Command).publishStream()); err != nil {
+	if err := ns.nc.WriteCommand(SIDNetStream, publishStream()); err != nil {
 		return err
 	}
 
 	// export publisher
-	return ns.streamDone(_publish)
+	ns.timer = time.NewTimer(AVReadTimeout)
+	if err := ns.nc.server.obs.OnRTMPPublish(ns); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // OnDeleteStream .
@@ -145,15 +137,8 @@ func (ns *NetStream) onDeleteStream(command *Command) error {
 	return ns.nc.onDeleteStream(command)
 }
 
-// make stream done signal: publish, subscribe, unpublish, unsubscribe
-func (ns *NetStream) streamDone(status uint8) error {
-	ns.status = status
-	ns.nc.streamDone <- ns
-	return nil
-}
-
 // Info .
-func (ns *NetStream) Info() interface{} {
+func (ns *NetStream) Info() *StreamInfo {
 	return ns.info
 }
 
@@ -166,34 +151,39 @@ func (ns *NetStream) ConnInfo() *ConnInfo {
 /********* Publish Interface ********/
 /************************************/
 
-// ReadAVPacket read from publisher, block if no av packet in rtmp net-stream
+// ReadAVPacket read with timeout
 func (ns *NetStream) ReadAVPacket() (*avformat.AVPacket, error) {
-	if ns.status == _closed {
-		return nil, fmt.Errorf("RTMP: stream '%d' status is closed", ns.id)
+	if ns.closed {
+		return nil, fmt.Errorf("RTMP: stream '%s' is closed", ns.info.Name)
 	}
 
-	message, ok := <-ns.mediaQueue
-	if !ok {
-		return nil, fmt.Errorf("RTMP: stream '%d' media queue closed", ns.id)
+	ns.timer.Reset(AVReadTimeout)
+	select {
+	case <-ns.timer.C:
+		return nil, fmt.Errorf("RTMP: stream '%s' read timeout", ns.info.Name)
+	case message, ok := <-ns.avQueue:
+		if !ok {
+			return nil, fmt.Errorf("RTMP: stream '%s' media buffer closed", ns.info.Name)
+		}
+		packet := &avformat.AVPacket{
+			TypeID:    message.TypeID,
+			Length:    message.Length,
+			Timestamp: message.Timestamp,
+			StreamID:  message.StreamID,
+			Body:      message.Body.Bytes(),
+		}
+		return packet, nil
 	}
-	packet := &avformat.AVPacket{
-		TypeID:    message.TypeID,
-		Length:    message.Length,
-		Timestamp: message.Timestamp,
-		StreamID:  message.StreamID,
-		Body:      message.Body.Bytes(),
-	}
-	return packet, nil
 }
 
 /************************************/
 /******** Subscribe Interface *******/
 /************************************/
 
-// WriteAVPacket .
+// WriteAVPacket non-block write
 func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
-	if ns.status == _closed {
-		return fmt.Errorf("RTMP: net-stream status is closed")
+	if ns.closed {
+		return fmt.Errorf("RTMP: stream id '%d' is closed", ns.id)
 	}
 
 	message := &Message{
@@ -204,19 +194,12 @@ func (ns *NetStream) WriteAVPacket(packet *avformat.AVPacket) error {
 		Body:      bytes.NewBuffer(packet.Body),
 	}
 
-	// check out message buffer is full
-	if len(ns.nc.outMessageStream) > cap(ns.nc.outMessageStream)-24 {
-		return fmt.Errorf("RTMP: net-stream out buffer is full")
-	}
-	ns.nc.outMessageStream <- message
-	return nil
+	return ns.nc.AsyncWrite(message)
 }
 
 // Close .
 func (ns *NetStream) Close() error {
-	if ns.status != _closed {
-		close(ns.mediaQueue)
-		ns.status = _closed
-	}
+	ns.closed = true
+	ns.nc.Close()
 	return nil
 }
