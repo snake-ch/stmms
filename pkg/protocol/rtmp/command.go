@@ -1,6 +1,7 @@
 package rtmp
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -19,6 +20,14 @@ type Command struct {
 	TransactionID uint32
 	Objects       []interface{}
 	UserArguments []interface{}
+}
+
+func (cmd *Command) Bytes() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	if _, err := cmd.WriteTo(buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // WriteTo write command to writer
@@ -52,7 +61,7 @@ func (cmd *Command) WriteTo(w Writer) (n int, err error) {
 	return
 }
 
-func (cmd *Command) connectSuccess(transactionID uint32) *Command {
+func connectSuccess(transactionID uint32) *Command {
 	object := make(map[string]interface{})
 	object["fmsVer"] = "GOSM/0,0,1,0"
 	object["author"] = "Snake"
@@ -70,7 +79,7 @@ func (cmd *Command) connectSuccess(transactionID uint32) *Command {
 		UserArguments: []interface{}{argument}}
 }
 
-func (cmd *Command) connectError(transactionID uint32) *Command {
+func connectReject(transactionID uint32) *Command {
 	argument := make(map[string]interface{})
 	argument["level"] = "status"
 	argument["code"] = "NetConnection.Connect.Rejected"
@@ -83,7 +92,7 @@ func (cmd *Command) connectError(transactionID uint32) *Command {
 		UserArguments: []interface{}{argument}}
 }
 
-func (cmd *Command) createStreamSuccess(transactionID uint32, streamID uint32) *Command {
+func createStreamSuccess(transactionID uint32, streamID uint32) *Command {
 	return &Command{
 		Name:          "_result",
 		TransactionID: transactionID,
@@ -91,7 +100,7 @@ func (cmd *Command) createStreamSuccess(transactionID uint32, streamID uint32) *
 		UserArguments: []interface{}{streamID}}
 }
 
-func (cmd *Command) publishStream() *Command {
+func publishStream() *Command {
 	argument := make(map[string]interface{})
 	argument["level"] = "status"
 	argument["code"] = "NetStream.Publish.Start"
@@ -104,7 +113,7 @@ func (cmd *Command) publishStream() *Command {
 		UserArguments: []interface{}{argument}}
 }
 
-func (cmd *Command) resetStream() *Command {
+func resetStream() *Command {
 	argument := make(map[string]interface{})
 	argument["level"] = "status"
 	argument["code"] = "NetStream.Play.Reset"
@@ -117,7 +126,7 @@ func (cmd *Command) resetStream() *Command {
 		UserArguments: []interface{}{argument}}
 }
 
-func (cmd *Command) startStream() *Command {
+func startStream() *Command {
 	argument := make(map[string]interface{})
 	argument["level"] = "status"
 	argument["code"] = "NetStream.Play.Start"
