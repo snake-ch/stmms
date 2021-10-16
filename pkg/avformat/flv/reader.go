@@ -9,8 +9,7 @@ import (
 
 // Reader .
 type Reader struct {
-	r         io.Reader
-	flvHeader []byte
+	r io.Reader
 }
 
 // ReadFlvHeader .
@@ -20,10 +19,9 @@ func (fr *Reader) ReadFlvHeader() ([]byte, error) {
 		return nil, err
 	}
 	// valid flv header
-	if bytes.Compare(FlvHeader, flvHeader) != 0 {
+	if !bytes.Equal(FlvHeader, flvHeader) {
 		return nil, fmt.Errorf("FLV: header invalid, %v", flvHeader)
 	}
-	fr.flvHeader = flvHeader
 	return flvHeader, nil
 }
 
@@ -33,15 +31,14 @@ func (fr *Reader) ReadPreTagSize0() error {
 	if err := binary.Read(fr.r, binary.BigEndian, &size); err != nil {
 		return err
 	}
-	if 0 != size {
-		return fmt.Errorf("FLV: first pre-tag size error, should be 0")
+	if size != 0 {
+		return fmt.Errorf("FLV: first pre-tag size error, must be 0")
 	}
 	return nil
 }
 
-// ReadFlvFragment .
-// format: tag-header(11bytes) + tag-data + pre-tag-size(4bytes)
-func (fr *Reader) ReadFlvFragment() (*Tag, uint32, error) {
+// ReadFlvSegment, format: tag-header(11bytes) + tag-data + pre-tag-size(4bytes)
+func (fr *Reader) ReadFlvSegment() (*Tag, uint32, error) {
 	flvTag := &Tag{}
 
 	// tag header

@@ -15,7 +15,7 @@ type Writer struct {
 
 // NewWriter .
 func NewWriter(w io.Writer, app string, stream string) (*Writer, error) {
-	writer := &Writer{
+	fw := &Writer{
 		app:    app,
 		stream: stream,
 		w:      w,
@@ -28,7 +28,7 @@ func NewWriter(w io.Writer, app string, stream string) (*Writer, error) {
 	if err := binary.Write(w, binary.BigEndian, uint32(0)); err != nil {
 		return nil, err
 	}
-	return writer, nil
+	return fw, nil
 }
 
 // WriteTag write tag and previous tag size. ex. message from rtmp publisher
@@ -68,15 +68,16 @@ func (fw *Writer) WriteTag(tag *Tag) error {
 	return nil
 }
 
-// WriteRawTag write flv-tag raw data direct. ex. data read from flv file source
-func (fw *Writer) WriteRawTag(rawTag []byte) error {
+// WriteRawTag write flv-tag raw data direct, padding fixs data offset,
+// ex. data read from flv file source or data from rtp or others
+func (fw *Writer) WriteRawTag(rawTag []byte, padding uint32) error {
 	// flv raw tag
 	if _, err := fw.w.Write(rawTag); err != nil {
 		return err
 	}
 	// previous tag size
 	pSize := make([]byte, 4)
-	binary.BigEndian.PutUint32(pSize, uint32(len(rawTag))+11)
+	binary.BigEndian.PutUint32(pSize, uint32(len(rawTag))+padding)
 	if _, err := fw.w.Write(pSize); err != nil {
 		return err
 	}

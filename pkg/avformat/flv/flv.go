@@ -1,6 +1,7 @@
 package flv
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -119,22 +120,26 @@ var (
 		0: 5500,
 		1: 11000,
 		2: 22000,
-		3: 44000}
+		3: 44000,
+	}
 
 	SoundSize = map[byte]string{
 		0: "8Bit",
-		1: "16Bit"}
+		1: "16Bit",
+	}
 
 	SoundType = map[byte]string{
 		0: "Mono",
-		1: "Stereo"}
+		1: "Stereo",
+	}
 
 	FrameType = map[byte]string{
 		1: "keyframe (for AVC, a seekable frame)",
 		2: "inter frame (for AVC, a non-seekable frame)",
 		3: "disposable inter frame (H.263 only)",
 		4: "generated keyframe (reserved for server use only)",
-		5: "video info/command frame"}
+		5: "video info/command frame",
+	}
 
 	CodecID = map[byte]string{
 		1:  "JPEG (currently unused)",
@@ -144,7 +149,8 @@ var (
 		5:  "On2 VP6 with alpha channel",
 		6:  "Screen video version 2",
 		7:  "AVC/H.264",
-		12: "HEVC/H.265"}
+		12: "HEVC/H.265",
+	}
 )
 
 // FlvHeader .
@@ -166,36 +172,42 @@ type TagHeader struct {
 
 // AudioTagData .
 type AudioTagData struct {
-	soundFormat uint8
-	soundRate   uint8
-	soundSize   uint8
-	soundType   uint8
-	soundData   []byte
+	SoundFormat    uint8
+	SoundRate      uint8
+	SoundSize      uint8
+	SoundType      uint8
+	AACPackageType uint8
+	Data           []byte
+}
+
+// Bytes .
+func (tag *AudioTagData) Bytes() []byte {
+	buf := bytes.NewBuffer([]byte{})
+	buf.WriteByte(tag.SoundFormat<<4 | tag.SoundRate<<2 | tag.SoundSize<<1 | tag.SoundType)
+	buf.WriteByte(tag.AACPackageType)
+	buf.Write(tag.Data)
+	return buf.Bytes()
 }
 
 // VideoTagData .
 type VideoTagData struct {
-	frameType     uint8
-	codecID       uint8
-	avcPacketType uint8
-	videoData     []byte
+	FrameType       uint8
+	CodecID         uint8
+	AVCPacketType   uint8
+	CompositionTime int32
+	Data            []byte
 }
 
-// AudioSeqHeader .
-// see ISO 14496-3 setion for the description MP4/F4V file
-type AudioSeqHeader struct {
-}
-
-// VideoSeqHeader .
-// see ISO 14496-15 5_2_4_1 setion for the description of AVCDecoderConfigurationRecord
-type VideoSeqHeader struct {
-	ConfigurationVersion byte
-	AvcProfileIndication byte
-	ProfileCompatibility byte
-	AvcLevelIndication   byte
-	LengthSizeMinusOne   byte
-	Sps                  []byte // pictureParameterSetNALUnits
-	Pps                  []byte // sequenceParameterSetNALUnits
+// Bytes .
+func (tag *VideoTagData) Bytes() []byte {
+	buf := new(bytes.Buffer)
+	buf.WriteByte(tag.FrameType<<4 | tag.CodecID)
+	buf.WriteByte(tag.AVCPacketType)
+	buf.WriteByte(byte(tag.CompositionTime))
+	buf.WriteByte(byte(tag.CompositionTime >> 8))
+	buf.WriteByte(byte(tag.CompositionTime >> 16))
+	buf.Write(tag.Data)
+	return buf.Bytes()
 }
 
 // IsMetadata .
@@ -219,85 +231,59 @@ func (tag *Tag) IsHEVC() bool {
 }
 
 // ParseTagHeader .
-func (tag *Tag) ParseTagHeader(b []byte) error {
-	if len(b) < 11 {
-		return fmt.Errorf("FLV: invalid to parse audio tag data, length = %d", len(b))
+func (tag *Tag) ParseTagHeader(p []byte) error {
+	if len(p) < 11 {
+		return fmt.Errorf("FLV: invalid to parse audio tag data, length = %d", len(p))
 	}
 	tag.TagHeader = &TagHeader{}
-	tag.TagHeader.TagType = b[0]
-	tag.TagHeader.DataSize = binary.BigEndian.Uint32(b[1:4])
-	tag.TagHeader.Timestamp = uint32(b[7])<<24 + binary.BigEndian.Uint32(b[4:7])
+	tag.TagHeader.TagType = p[0]
+	tag.TagHeader.DataSize = binary.BigEndian.Uint32(p[1:4])
+	tag.TagHeader.Timestamp = uint32(p[7])<<24 + binary.BigEndian.Uint32(p[4:7])
 	tag.TagHeader.StreamID = 0 // always 0
 	return nil
 }
 
-// ParseAudioTagData .
-func parseAudioTagData(b []byte) (tagData *AudioTagData, err error) {
-	if len(b) < 1 {
-		err = fmt.Errorf("FLV: invalid length to parse audio tag data")
+// ParseAACAudioData .
+func ParseAACAudioData(p []byte) (*AudioTagData, error) {
+	if len(p) < 2 {
+		return nil, fmt.Errorf("FLV: invalid length to parse aac audio data, len=%d", len(p))
 	}
-	// audio parameters
-	param := b[0]
-	tagData.soundFormat = param >> 4
-	tagData.soundRate = (param >> 2) & 0x3
-	tagData.soundSize = (param >> 1) & 0x1
-	tagData.soundType = param & 0x1
-	// audio data
-	if len(b) > 2 {
-		tagData.soundData = b[1:]
+
+	tagData := &AudioTagData{}
+	tagData.SoundFormat = p[0] >> 4
+	tagData.SoundRate = (p[0] >> 2) & 0x3
+	tagData.SoundSize = (p[0] >> 1) & 0x1
+	tagData.SoundType = p[0] & 0x1
+
+	// aac
+	if tagData.SoundFormat != SoundFormatAAC {
+		return nil, fmt.Errorf("FLV: invalid aac audio sound format")
 	}
-	return
+	tagData.AACPackageType = p[1]
+	tagData.Data = p[2:]
+
+	return tagData, nil
 }
 
-// ParseVideoTagData .
-func parseVideoTagData(b []byte) (tagData *VideoTagData, err error) {
-	if len(b) < 1 {
-		err = fmt.Errorf("FLV: invalid length to parse video tag data")
-	}
-	// video parameters
-	param := b[0]
-	tagData.frameType = param >> 4
-	tagData.codecID = param & 0x0F
-	// video data
-	if len(b) > 2 {
-		tagData.videoData = b[1:]
-	}
-	return
-}
-
-// ParseVideoSeqHeader parse AVC video packet sequence header from flv video tag data
-func ParseVideoSeqHeader(tagData []byte) (*VideoSeqHeader, error) {
-	if len(tagData) < 11 {
-		return nil, fmt.Errorf("FLV: invalid length to parse video tag data")
+// ParseAVCVideoPackage .
+func ParseAVCVideoPackage(p []byte) (*VideoTagData, error) {
+	if len(p) < 6 {
+		return nil, fmt.Errorf("FLV: invalid length to parse avc video data, len=%d", len(p))
 	}
 
-	seqHeader := &VideoSeqHeader{}
-	seqHeader.ConfigurationVersion = tagData[5]
-	seqHeader.AvcProfileIndication = tagData[6]
-	seqHeader.ProfileCompatibility = tagData[7]
-	seqHeader.AvcLevelIndication = tagData[8]
-	seqHeader.LengthSizeMinusOne = tagData[9]&0x03 + 1 // NAL-Unit size
+	tagData := &VideoTagData{}
+	tagData.FrameType = p[0] >> 4
+	tagData.CodecID = p[0] & 0x0F
 
-	// extract SPS
-	var pos uint16 = 10
-	numOfSps := int(tagData[pos] & 0x1F) // numOfSequenceParameterSets
-	pos = pos + 1
-	for idx := 0; idx < numOfSps; idx++ {
-		lenOfSps := binary.BigEndian.Uint16(tagData[pos:]) // sequenceParameterSetLength
-		pos = pos + 2
-		seqHeader.Sps = append(seqHeader.Sps, tagData[pos:pos+lenOfSps]...)
-		pos = pos + lenOfSps
+	// avc
+	if tagData.FrameType != AVCKeyFrame && tagData.FrameType != AVCInterFrame {
+		return nil, fmt.Errorf("FLV: invalid avc video frame type")
 	}
-
-	// extract PPS
-	numOfPps := int(tagData[pos] & 0x1F) // numOfPictureParameterSets
-	pos = pos + 1
-	for idx := 0; idx < numOfPps; idx++ {
-		lenOfPps := binary.BigEndian.Uint16(tagData[pos:]) // pictureParameterSetLength
-		pos = pos + 2
-		seqHeader.Pps = append(seqHeader.Pps, tagData[pos:pos+lenOfPps]...)
-		pos = pos + lenOfPps
+	tagData.AVCPacketType = p[1]
+	for idx := 0; idx < 3; idx++ {
+		tagData.CompositionTime = tagData.CompositionTime<<8 + int32(p[2+idx])
 	}
+	tagData.Data = p[5:]
 
-	return seqHeader, nil
+	return tagData, nil
 }
