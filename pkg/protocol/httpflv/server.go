@@ -6,66 +6,73 @@ import (
 	"net/http"
 	"strings"
 
+	"gosm/pkg/config"
 	"gosm/pkg/log"
 )
 
-const (
-	_Version = "GOSM/flv_0.0.1"
-)
-
-// ServerObserver .
-type ServerObserver interface {
+type Observer interface {
 	OnHTTPFlvSubscribe(stream *NetStream) error
 	OnHTTPFlvUnSubscribe(stream *NetStream) error
 }
 
-// Server .
 type Server struct {
 	ctx      context.Context
 	network  string
 	address  string
 	listener net.Listener
-	obs      ServerObserver
+	obs      Observer
 }
 
 // NewServer .
-func NewServer(network string, address string, obs ServerObserver) (*Server, func(), error) {
+func NewServer(network string, address string) (*Server, func(), error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	server := &Server{
-		network: network,
-		address: address,
-		obs:     obs,
+		ctx:      ctx,
+		network:  network,
+		address:  address,
+		listener: nil,
+		obs:      nil,
 	}
 
-	var cancel context.CancelFunc
-	server.ctx, cancel = context.WithCancel(context.Background())
 	closeFunc := func() {
 		defer cancel()
 		if err := server.listener.Close(); err != nil {
-			log.Error("HTTP-Flv: server shutdown error, %v", err)
+			log.Error("%v", err)
 		}
 	}
+
 	return server, closeFunc, nil
 }
 
-// Start .
-func (server *Server) Start() error {
+// SetObserver
+func (server *Server) SetObserver(obs Observer) {
+	server.obs = obs
+}
+
+// Serve .
+func (server *Server) Serve() {
+	if server.obs == nil {
+		log.Fatal("HTTP-FLV: observer is empty")
+	}
+
 	// listener
 	var err error
 	server.listener, err = net.Listen(server.network, server.address)
 	if err != nil {
-		log.Fatal("HTTP-Flv: server listen error, %v", err)
+		log.Fatal("HTTP-FLV: server listen error, %v", err)
 	}
-	log.Info("HTTP-Flv: Server Listen On %s", server.listener.Addr().String())
+	log.Info("HTTP-FLV: server listen on %s", server.listener.Addr().String())
 
 	// muxer
 	muxer := http.NewServeMux()
 	muxer.HandleFunc("/", server.handleConn)
 
 	// http server
-	if err := http.Serve(server.listener, muxer); err != nil {
-		return err
-	}
-	return nil
+	go func() {
+		if err := http.Serve(server.listener, muxer); err != nil {
+			log.Error("%v", err)
+		}
+	}()
 }
 
 // handle stream pulling
@@ -89,7 +96,7 @@ func (server *Server) handleConn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// header response
-	w.Header().Add("Server", _Version)
+	w.Header().Add("Server", config.HTTPFLV)
 	w.Header().Add("Connection", "Keep-Alive")
 	w.Header().Add("Cache-Control", "no-cache")
 	w.Header().Add("Content-Type", "video/x-flv")
@@ -109,7 +116,7 @@ func (server *Server) handleConn(w http.ResponseWriter, r *http.Request) {
 		ns.cancel()
 	}
 
-	// wait for writing done
+	// waiting for done
 	<-ns.ctx.Done()
 	if err := server.obs.OnHTTPFlvUnSubscribe(ns); err != nil {
 		log.Error("%v", err)

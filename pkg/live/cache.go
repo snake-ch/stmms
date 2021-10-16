@@ -6,10 +6,7 @@ import (
 	"gosm/pkg/avformat"
 )
 
-const (
-	_GopMax  = 1024
-	_GopSize = 1
-)
+const GopMax = 128
 
 /************************************/
 /********** AV Packet Cache *********/
@@ -19,15 +16,15 @@ const (
 type AVCache struct {
 	audioConfig *avformat.AVPacket // audio parameter sets
 	videoConfig *avformat.AVPacket // video parameter sets
-	gopGroup    *GopCache
+	gopGroup    *GopGroup
 }
 
-// NewAVCache TODO: parameterize gop size
-func NewAVCache() *AVCache {
+// NewAVCache .
+func NewAVCache(gopSize uint8) *AVCache {
 	return &AVCache{
 		audioConfig: nil,
 		videoConfig: nil,
-		gopGroup:    NewGopCache(_GopSize),
+		gopGroup:    NewGopGroup(gopSize),
 	}
 }
 
@@ -44,7 +41,7 @@ func (cache *AVCache) Write(packet *avformat.AVPacket) error {
 	return cache.gopGroup.Write(packet)
 }
 
-// WriteTo flush all cache data to subscriber
+// WriteTo flush data to subscriber
 func (cache *AVCache) WriteTo(wc AVWriteCloser) error {
 	// audio config
 	if cache.audioConfig != nil {
@@ -89,8 +86,8 @@ func (gop *gop) reset() {
 
 // cache av packet
 func (gop *gop) write(packet *avformat.AVPacket) error {
-	if len(gop.packets) >= _GopMax {
-		return fmt.Errorf("GOP: large than maxinum capacity %d", _GopMax)
+	if len(gop.packets) >= GopMax {
+		return fmt.Errorf("GOP: large than maxinum capacity %d", GopMax)
 	}
 	gop.packets = append(gop.packets, packet)
 	return nil
@@ -107,15 +104,14 @@ func (gop *gop) writeTo(wc AVWriteCloser) error {
 }
 
 // GopCache group of GOP
-type GopCache struct {
+type GopGroup struct {
 	capacity uint8
 	current  uint8
 	gops     []*gop
 }
 
-// NewGopCache .
-func NewGopCache(capacity uint8) *GopCache {
-	group := &GopCache{
+func NewGopGroup(capacity uint8) *GopGroup {
+	group := &GopGroup{
 		capacity: capacity,
 		current:  0,
 		gops:     make([]*gop, capacity),
@@ -124,7 +120,7 @@ func NewGopCache(capacity uint8) *GopCache {
 }
 
 // Write cache av packet
-func (group *GopCache) Write(packet *avformat.AVPacket) error {
+func (group *GopGroup) Write(packet *avformat.AVPacket) error {
 	if group.capacity == 0 {
 		return nil
 	}
@@ -133,7 +129,7 @@ func (group *GopCache) Write(packet *avformat.AVPacket) error {
 		return nil
 	}
 
-	// IDR frame, use next gop, create if not exist, reset if exist
+	// IDR frame, use next gop create if not exist, else reset
 	if packet.IsAVCKeyframe() || packet.IsHEVCKeyframe() {
 		group.current = (group.current + 1) % group.capacity
 		if gop := group.gops[group.current]; gop != nil {
@@ -144,12 +140,15 @@ func (group *GopCache) Write(packet *avformat.AVPacket) error {
 	}
 
 	// cache IDR or B or P frame
-	group.gops[group.current].write(packet)
+	gop := group.gops[group.current]
+	if gop != nil {
+		gop.write(packet)
+	}
 	return nil
 }
 
 // WriteTo write gops cache av packets to subscriber
-func (group *GopCache) WriteTo(wc AVWriteCloser) error {
+func (group *GopGroup) WriteTo(wc AVWriteCloser) error {
 	for idx := uint8(0); idx < group.capacity; idx++ {
 		pos := (group.current + 1 + idx) % group.capacity
 		if gop := group.gops[pos]; gop != nil {

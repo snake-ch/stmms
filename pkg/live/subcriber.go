@@ -8,23 +8,23 @@ import (
 
 // Status
 const (
-	_new = iota
-	_running
-	_closed
+	New = iota + 1
+	Running
+	Closed
 )
 
 // Protocol
 const (
-	_Rtmp    = "rtmp"
-	_HTTPFlv = "http-flv"
-	_Hls     = "hls"
-	_Dash    = "dash"
+	RTMP    = "rtmp"
+	HTTPFLV = "http-flv"
+	HLS     = "hls"
+	DASH    = "dash"
 )
 
 // Type
 const (
-	_TypeLive   = "LIVE"
-	_TypeRecord = "RECOED"
+	TypeLive   = "LIVE"
+	TypeRecord = "RECOED"
 )
 
 // AVWriteCloser .
@@ -44,11 +44,11 @@ type SubscriberInfo struct {
 // Subscriber .
 type Subscriber struct {
 	status uint8
-	writer AVWriteCloser
+	wc     AVWriteCloser
 	info   *SubscriberInfo
 }
 
-func (s *Subscriber) close() error {
-	s.status = _closed
-	return s.writer.Close()
+func (s *Subscriber) Close() error {
+	s.status = Closed
+	return s.wc.Close()
 }
