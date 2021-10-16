@@ -16,8 +16,8 @@ type RoomMgmt struct {
 }
 
 // NewRoomMgmt .
-func NewRoomMgmt() (*RoomMgmt, error) {
-	return &RoomMgmt{rooms: &sync.Map{}}, nil
+func NewRoomMgmt() *RoomMgmt {
+	return &RoomMgmt{rooms: &sync.Map{}}
 }
 
 // find room and get
@@ -28,11 +28,13 @@ func (mgmt *RoomMgmt) load(name string) *Room {
 	return nil
 }
 
-// find room and get, create room if not exist
+// find room and get, create new if not exist
 func (mgmt *RoomMgmt) loadOrStore(name string) (*Room, bool) {
 	room, exist := mgmt.rooms.LoadOrStore(name, &Room{
-		Publisher:   nil,
-		Subscribers: &sync.Map{},
+		Publisher:          nil, // lazy created
+		RTMPSubscribers:    &sync.Map{},
+		HTTPFlvSubscribers: &sync.Map{},
+		HLSSubscriber:      nil, // lazy created
 	})
 	return room.(*Room), exist
 }
@@ -47,74 +49,113 @@ type RoomInfo struct {
 
 // Room living room
 type Room struct {
-	Publisher   *Publisher //
-	Subscribers *sync.Map  // <=> map[subscriber's name]*subscriber
+	Publisher          *Publisher
+	RTMPSubscribers    *sync.Map   // <=> map[subscriber's name]*subscriber
+	HTTPFlvSubscribers *sync.Map   // <=> map[subscriber's name]*subscriber
+	HLSSubscriber      *Subscriber // hls subscriber
 }
 
 // find subscriber
 func (room *Room) loadSubscriber(name string) (*Subscriber, bool) {
-	if subscriber, exist := room.Subscribers.Load(name); exist {
+	if subscriber, exist := room.RTMPSubscribers.Load(name); exist {
+		return subscriber.(*Subscriber), true
+	}
+	if subscriber, exist := room.HTTPFlvSubscribers.Load(name); exist {
 		return subscriber.(*Subscriber), true
 	}
 	return nil, false
 }
 
-// room start publisher, loop to broadcast av packets
+// room start to publish, loop to broadcast av packets
 func (room *Room) serve() {
 	publisher := room.Publisher
 	defer func() {
 		log.Info("Room: app '%s', stream '%s' stop publishing", publisher.info.AppName, publisher.info.StreamName)
+		room.Close()
 	}()
-	log.Info("Room: app '%s' stream '%s' start publishing", publisher.info.AppName, publisher.info.StreamName)
+	log.Info("Room: app '%s', stream '%s' start publishing", publisher.info.AppName, publisher.info.StreamName)
 
 	for {
-		select {
-		case <-publisher.ctx.Done():
+		packet, err := publisher.rc.ReadAVPacket()
+		if err != nil {
 			return
-		default:
-			packet, err := publisher.reader.ReadAVPacket()
-			if err != nil {
+		}
+
+		// HLS
+		if room.HLSSubscriber != nil {
+			if err := room.HLSSubscriber.wc.WriteAVPacket(packet); err != nil {
+				room.HLSSubscriber.Close()
+			}
+		}
+
+		// RTMP & HTTL-FLV
+		switch packet.TypeID {
+		case avformat.TypeMetadataAMF0: // metadata
+			if err := publisher.parseMetadata(packet); err != nil {
+				log.Error("Publisher: parse metadata error, %v", err)
 				return
 			}
-			switch packet.TypeID {
-			case avformat.TypeMetadataAMF0: // metadata
-				if err := publisher.parseMetadata(packet); err != nil {
-					log.Error("Publisher: parses metadata error, %v", err)
-					return
-				}
-				metaPacket, _ := publisher.metadata()
-				room.Subscribers.Range(room.broadcast(metaPacket))
-			case avformat.TypeAudio: // audio
-				fallthrough
-			case avformat.TypeVideo: // video
-				publisher.cache.Write(packet)
-				room.Subscribers.Range(room.broadcast(packet))
-			}
+			metaPacket, _ := publisher.metadata()
+			room.RTMPSubscribers.Range(room.broadcast(room.RTMPSubscribers, metaPacket))
+			room.HTTPFlvSubscribers.Range(room.broadcast(room.HTTPFlvSubscribers, metaPacket))
+		case avformat.TypeAudio: // audio
+			fallthrough
+		case avformat.TypeVideo: // video
+			publisher.cache.Write(packet)
+			room.RTMPSubscribers.Range(room.broadcast(room.RTMPSubscribers, packet))
+			room.HTTPFlvSubscribers.Range(room.broadcast(room.HTTPFlvSubscribers, packet))
 		}
 	}
 }
 
 // broadcast av packet to all subscribers
-func (room *Room) broadcast(packet *avformat.AVPacket) func(key, value interface{}) bool {
+func (room *Room) broadcast(m *sync.Map, packet *avformat.AVPacket) func(key, value interface{}) bool {
 	return func(key, value interface{}) bool {
 		subscriber := value.(*Subscriber)
 
 		var err error
 		switch subscriber.status {
-		case _new: // flush publisher's cache av packets
-			err = room.Publisher.cache.WriteTo(subscriber.writer)
-			subscriber.status = _running
-		case _running: // flush av packet
-			err = subscriber.writer.WriteAVPacket(packet)
-		case _closed:
-			room.Subscribers.Delete(key)
+		case New: // flush gop cache
+			err = room.Publisher.cache.WriteTo(subscriber.wc)
+			subscriber.status = Running
+		case Running: // flush av packet
+			err = subscriber.wc.WriteAVPacket(packet)
+		case Closed:
+			m.Delete(key)
 		}
 
 		if err != nil {
 			log.Error("Room: subscriber '%s' writes av packet error, %v, remove it", subscriber.info.UID, err)
-			subscriber.close()
-			room.Subscribers.Delete(key)
+			subscriber.Close()
+			m.Delete(key)
 		}
 		return true
 	}
+}
+
+// Close
+func (room *Room) Close() error {
+	// close publisher
+	if room.Publisher != nil {
+		room.Publisher.Close()
+	}
+
+	// close rtmp subscribers
+	room.RTMPSubscribers.Range(func(key, value interface{}) bool {
+		value.(*Subscriber).Close()
+		return true
+	})
+
+	// close http-flv subscribers
+	room.HTTPFlvSubscribers.Range(func(key, value interface{}) bool {
+		value.(*Subscriber).Close()
+		return true
+	})
+
+	// close hls subscriber
+	if room.HLSSubscriber != nil {
+		room.HLSSubscriber.Close()
+	}
+
+	return nil
 }
