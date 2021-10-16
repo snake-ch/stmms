@@ -10,17 +10,13 @@ import (
 	"gosm/pkg/protocol/amf"
 )
 
-func (nc *NetConnection) processMessage(message *Message) error {
-	if message == nil {
-		return nil
-	}
+func (nc *NetConnection) process(message *Message) error {
 	// log.Debug("%0s message: %+v\n", "C -> S", message)
 
-	// check should make acknowledgement
+	// make acknowledgement
 	nc.received += message.Length
 	if nc.received >= nc.remoteWindowsSize {
 		nc.SetAck(nc.received)
-		nc.received = 0
 	}
 
 	switch message.TypeID {
@@ -51,7 +47,7 @@ func (nc *NetConnection) processMessage(message *Message) error {
 	case CommandAmf3:
 		return nc.processCommandAMF3(message)
 	default:
-		log.Debug("unkown message type %d, nothing to do\n", message.TypeID)
+		log.Debug("RTMP: unkown message type %d\n", message.TypeID)
 	}
 	return nil
 }
@@ -61,7 +57,11 @@ func (nc *NetConnection) processMessage(message *Message) error {
  *******************************************************************/
 
 func (nc *NetConnection) processSetChunkSize(message *Message) error {
-	return binary.Read(message.Body, binary.BigEndian, &nc.remoteChunkSize)
+	err := binary.Read(message.Body, binary.BigEndian, &nc.remoteChunkSize)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (nc *NetConnection) processAbortMessage(message *Message) error {
@@ -149,17 +149,23 @@ func (nc *NetConnection) processCommandAMF0(message *Message) error {
 	return nc.onCommand(message.StreamID, command)
 }
 
+// TODO: supported
 func (nc *NetConnection) processCommandAMF3(message *Message) error {
 	return nil
 }
 
-// throw audio/video/metadata message to net-stream
+// propagate audio/video/metadata message to net-stream
 func (nc *NetConnection) processMediaMessage(message *Message) error {
 	stream, ok := nc.streams[message.StreamID]
 	if !ok {
 		return fmt.Errorf("RTMP: stream id %d not found to transmit audio/video/metadata", message.StreamID)
 	}
-	stream.mediaQueue <- message
+
+	// TODO: maybe block, fix me.
+	if stream.closed {
+		return fmt.Errorf("RTMP: stream '%s' is closed", stream.info.Name)
+	}
+	stream.avQueue <- message
 	return nil
 }
 
@@ -184,8 +190,7 @@ func (nc *NetConnection) WriteMessage(typeID uint8, streamID uint32, timestamp u
 		message.Body = new(bytes.Buffer)
 	}
 
-	nc.outMessageStream <- message
-	return nil
+	return nc.Write(message)
 }
 
 /*******************************************************************
@@ -204,9 +209,10 @@ func (nc *NetConnection) SetChunkSize(size uint32) error {
 	if err := binary.Write(message.Body, binary.BigEndian, size); err != nil {
 		return err
 	}
-
+	if err := nc.Write(message); err != nil {
+		return err
+	}
 	nc.chunkSize = size
-	nc.outMessageStream <- message
 	return nil
 }
 
@@ -229,8 +235,7 @@ func (nc *NetConnection) SetAck(size uint32) error {
 	}
 
 	nc.received = 0
-	nc.outMessageStream <- message
-	return nil
+	return nc.Write(message)
 }
 
 // SetWindowAckSize .
@@ -246,8 +251,7 @@ func (nc *NetConnection) SetWindowAckSize() error {
 		return err
 	}
 
-	nc.outMessageStream <- message
-	return nil
+	return nc.Write(message)
 }
 
 // SetPeerBandwidth .
@@ -268,8 +272,7 @@ func (nc *NetConnection) SetPeerBandwidth(peerBandwidth uint32, limitType byte) 
 
 	nc.bandwidth = peerBandwidth
 	nc.bandwithLimit = limitType
-	nc.outMessageStream <- message
-	return nil
+	return nc.Write(message)
 }
 
 /*******************************************************************
@@ -300,8 +303,7 @@ func (nc *NetConnection) UserControlMessage(eventType uint16, eventData []byte) 
 	}
 	message.Length = message.Length + uint32(len(eventData))
 
-	nc.outMessageStream <- message
-	return nil
+	return nc.Write(message)
 }
 
 // SetBufferLength user control message set buff length

@@ -3,16 +3,29 @@ package rtmp
 import (
 	"bufio"
 	"bytes"
-	"context"
+	"errors"
 	"net"
 
 	"gosm/pkg/log"
 )
 
+// ConnInfo see rtmp-sepc-1.0 section 7.2.1.1 connect
+type ConnInfo struct {
+	App            string
+	FlashVer       string
+	SwfURL         string
+	TcURL          string
+	Fpad           bool
+	Capabilities   int
+	AudioCodecs    int
+	VideoCodecs    int
+	VideoFunction  int
+	PageURL        string
+	ObjectEncoding int
+}
+
 // NetConnection rtmp logical net connection
 type NetConnection struct {
-	ctx                  context.Context
-	cancel               context.CancelFunc
 	goConn               net.Conn
 	rw                   *bufio.ReadWriter
 	chunkSize            uint32
@@ -26,17 +39,14 @@ type NetConnection struct {
 	chunkStreams         map[uint32]*ChunkStream
 	received             uint32                // received message size
 	info                 *ConnInfo             // rtmp connection information
-	outMessageStream     chan *Message         // inner writing message channel buffer
+	outBuffer            chan *Message         // inner writing message buffer
 	streams              map[uint32]*NetStream // client net-streams
-	streamDone           chan *NetStream       // export publisher and subscriber
+	server               *Server               // rtmp server, for publishing callback
 }
 
 // NewNetConn rtmp logical net connection
-func NewNetConn(goConn net.Conn) *NetConnection {
-	context, cancelFunc := context.WithCancel(context.Background())
+func NewNetConn(server *Server, goConn net.Conn) *NetConnection {
 	return &NetConnection{
-		ctx:               context,
-		cancel:            cancelFunc,
 		goConn:            goConn,
 		rw:                bufio.NewReadWriter(bufio.NewReader(goConn), bufio.NewWriter(goConn)),
 		chunkSize:         128,
@@ -45,68 +55,64 @@ func NewNetConn(goConn net.Conn) *NetConnection {
 		remoteWindowsSize: 2500000,
 		chunkStreams:      make(map[uint32]*ChunkStream),
 		received:          0,
-		info:              nil,
-		outMessageStream:  make(chan *Message, 1024),
+		info:              &ConnInfo{},
+		outBuffer:         make(chan *Message, 1024),
 		streams:           make(map[uint32]*NetStream),
-		streamDone:        make(chan *NetStream),
+		server:            server,
 	}
-}
-
-// Start start rtmp connection to serve
-func (nc *NetConnection) Start() {
-	go nc.sending()
-	go nc.receiving()
 }
 
 // Close close rtmp connection
-func (nc *NetConnection) Close() {
-	for _, stream := range nc.streams {
-		stream.Close()
-	}
-	nc.cancel()
-	nc.goConn.Close()
+func (nc *NetConnection) Close() error {
+	return nc.goConn.Close()
 }
 
-// Sending loop to send rtmp message
-func (nc *NetConnection) sending() {
-	defer func() {
-		log.Debug("RTMP: client remote: %v, sending exit", nc.goConn.RemoteAddr())
+// Serve .
+func (nc *NetConnection) Serve() error {
+	// do loop to read rtmp message
+	go func() {
+		defer func() {
+			nc.Close()
+			log.Debug("RTMP: client remote: %v, reading exit", nc.goConn.RemoteAddr())
+		}()
+
+		for {
+			message, err := nc.Read()
+			if err != nil {
+				log.Error("RTMP: net connection read error, %v", err)
+				return
+			}
+
+			if message == nil {
+				continue
+			}
+
+			if err := nc.process(message); err != nil {
+				log.Error("RTMP: process message error, %v", err)
+				return
+			}
+		}
 	}()
-	for {
-		select {
-		case <-nc.ctx.Done():
-			return
-		case message := <-nc.outMessageStream:
-			if err := nc.write(message); err != nil {
+
+	// do loop to write rtmp message
+	go func() {
+		defer func() {
+			log.Debug("RTMP: client remote: %v, writing exit", nc.goConn.RemoteAddr())
+		}()
+
+		for message := range nc.outBuffer {
+			if err := nc.Write(message); err != nil {
 				log.Error("%v", err)
 				return
 			}
 		}
-	}
-}
-
-// Receiving loop to receive rtmp message
-func (nc *NetConnection) receiving() {
-	defer func() {
-		nc.Close()
-		log.Debug("RTMP: client remote: %v, receiving exit", nc.goConn.RemoteAddr())
 	}()
 
-	for {
-		message, err := nc.read()
-		if err != nil {
-			log.Error("RTMP: connection receive error, %v invoke close()", err)
-			return
-		}
-		if err := nc.processMessage(message); err != nil {
-			log.Error("RTMP: process message error, %v", err)
-			return
-		}
-	}
+	return nil
 }
 
-// read chunk package from client
-func (nc *NetConnection) read() (*Message, error) {
+// read full message from client, return nil if got a chunk
+func (nc *NetConnection) Read() (*Message, error) {
 	// chunk header
 	header := &ChunkHeader{}
 	if err := header.ReadFrom(nc.rw.Reader); err != nil {
@@ -178,14 +184,22 @@ func (nc *NetConnection) read() (*Message, error) {
 }
 
 // write message to client
-func (nc *NetConnection) write(message *Message) error {
+func (nc *NetConnection) Write(message *Message) error {
 	// log.Debug("%0s message: %+v\n", "S -> C", message)
-
 	if err := message.WriteTo(nc.rw.Writer, nc.chunkSize); err != nil {
 		return err
 	}
 	if err := nc.rw.Flush(); err != nil {
 		return err
 	}
+	return nil
+}
+
+// write message to net-connection inner buffer
+func (nc *NetConnection) AsyncWrite(message *Message) error {
+	if len(nc.outBuffer) > cap(nc.outBuffer)-24 {
+		return errors.New("RTMP: net-stream inner out buffer is full")
+	}
+	nc.outBuffer <- message
 	return nil
 }
